@@ -73,13 +73,13 @@ def bert_loader(
 #     with scopes.binding_by_name_scope("model", model):
 #         model = _builder(model)
 #         model = _bert_pretrained_loader(model)
-#         return model.get_body()
+#         return model.get_mergeable_body()
 
 
 @executable.executable()
 def regularize_body_l2_from_initial(model, reg_strength=0.0):
     if not reg_strength:
-        return lambda: 0.0
+        return model
 
     og_weights = [tf.identity(w) for w in model.trainable_weights]
 
@@ -103,8 +103,8 @@ def glue_finetuning_metrics(model, tasks):
 
 @executable.executable(
     default_bindings={
-        "loader": bert_loader,
         "initializer": bert_initializer,
+        "loader": bert_loader,
         "builder": bert_builder,
         "metrics": glue_finetuning_metrics,
     }

@@ -34,7 +34,15 @@ def _get_google_bert_model(model_name, fetch_dir=None):
     fetch_url = _BERT_MODELS_GOOGLE[model_name]
     fetched_file = pf.utils.fetch_url(fetch_url, fetch_dir=fetch_dir)
     fetched_dir = pf.utils.unpack_archive(fetched_file)
-    return fetched_dir
+
+    folder_name = os.path.basename(fetch_url)
+    if folder_name.endswith(".zip"):
+        folder_name = folder_name[:-4]
+
+    if os.path.exists(os.path.join(fetched_dir, folder_name)):
+        return os.path.join(fetched_dir, folder_name)
+    else:
+        return fetched_dir
 
 
 def get_pretrained_checkpoint(model_name, fetch_dir=None):

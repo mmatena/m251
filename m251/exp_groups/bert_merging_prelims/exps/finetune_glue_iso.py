@@ -16,7 +16,7 @@ from ..group import BertMergingPrelimsGroup
 
 
 TASKS = ("qqp", "sst2", "qnli")
-REG_STRENGTHS = (1.0, 1e-1, 1e-2, 3e-4, 0.0)
+REG_STRENGTHS = (1e-1, 1e-2, 3e-4, 0.0)
 
 
 @data_class.data_class()
@@ -66,7 +66,7 @@ class FinetuneIsoParams(object):
 
 
 @experiment.experiment(
-    uuid="87e969507fc341df992badcc14c7adf1",
+    uuid="20213c6ee3c445acac63773d0b317cd0",
     group=BertMergingPrelimsGroup,
     params_cls=FinetuneIsoParams,
     executable_cls=fitting.training_run,
@@ -78,20 +78,22 @@ class FinetuneIsoParams(object):
     ],
     fixed_params={
         "pretrained_model": "large",
-        # NOTE: Here None means use all training examples.
         "batch_size": 8,
-        # NOTE: See if we need 64 or 128 tokens for GLUE.
         "reg_type": "iso",
+        # NOTE: See if we need 64 or 128 tokens for GLUE.
         "sequence_length": 64,
+        # NOTE: Here None means use all training examples.
         "train_examples": None,
         "validation_examples": 4096,
         # NOTE: I should find a way to specific these cleaner.
         "examples_per_epoch": 25_000,
         "num_epochs": 200_000 // 25_000,
-        "learning_rate": 3e-5,
+        "learning_rate": 1e-5,
     },
     key_fields={"pretrained_model", "task", "reg_strength", "reg_type"},
     bindings=[
+        # For some reason, validation can cause the program to hang indefinitely.
+        scopes.ArgNameBindingSpec("with_validation", False),
         scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
         scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
         scopes.ArgNameBindingSpec("compiled_model", gc_exe.bert_finetuning_model),
@@ -100,6 +102,49 @@ class FinetuneIsoParams(object):
     ],
 )
 class FinetuneGlueIsoExperiment_Large(object):
+    def create_run_instance_config(self, params):
+        return runs.RunInstanceConfig(
+            global_binding_specs=params.create_binding_specs()
+        )
+
+
+@experiment.experiment(
+    uuid="4cc1e38d46f94786aa011cf4f536844d",
+    group=BertMergingPrelimsGroup,
+    params_cls=FinetuneIsoParams,
+    executable_cls=fitting.training_run,
+    # NOTE: Create these partials from concise descriptors later.
+    varying_params=[
+        {"task": task, "reg_strength": reg_str}
+        for task in TASKS
+        for reg_str in REG_STRENGTHS
+    ],
+    fixed_params={
+        "pretrained_model": "base",
+        "batch_size": 8,
+        "reg_type": "iso",
+        # NOTE: See if we need 64 or 128 tokens for GLUE.
+        "sequence_length": 64,
+        # NOTE: Here None means use all training examples.
+        "train_examples": None,
+        "validation_examples": 4096,
+        # NOTE: I should find a way to specific these cleaner.
+        "examples_per_epoch": 25_000,
+        "num_epochs": 200_000 // 25_000,
+        "learning_rate": 1e-5,
+    },
+    key_fields={"pretrained_model", "task", "reg_strength", "reg_type"},
+    bindings=[
+        # For some reason, validation can cause the program to hang indefinitely.
+        scopes.ArgNameBindingSpec("with_validation", False),
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        scopes.ArgNameBindingSpec("compiled_model", gc_exe.bert_finetuning_model),
+        scopes.ArgNameBindingSpec("optimizer", optimizers.adam_optimizer),
+        scopes.ArgNameBindingSpec("callbacks", ckpt_exec.checkpoint_saver_callback),
+    ],
+)
+class FinetuneGlueIsoExperiment_Base(object):
     def create_run_instance_config(self, params):
         return runs.RunInstanceConfig(
             global_binding_specs=params.create_binding_specs()

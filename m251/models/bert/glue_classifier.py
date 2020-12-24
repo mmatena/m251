@@ -1,6 +1,7 @@
 """TODO: Add title."""
 import bert
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from m251.models import model_abcs
 
@@ -103,18 +104,43 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
     ############################################
 
-    def get_body(self):
+    def assert_single_task(self):
+        assert len(self.num_classes) == 1
+
+    def get_mergeable_body(self):
         return self.bert_layer
+
+    def get_mergeable_variables(self):
+        return self.get_mergeable_body().trainable_weights
 
     def get_heads(self):
         return list(self.heads)
 
-    def get_head(self):
-        assert len(self.heads) == 1
+    def get_classifier_head(self):
+        self.assert_single_task()
         return self.heads[0]
 
     def add_regularizer(self, regularizer):
         self.regularizers.append(regularizer)
+
+    ############################################
+
+    def compute_logits(self, x, training=None, mask=None):
+        self.assert_single_task()
+        logits = self(x, training=training, mask=mask)
+        return logits[self.SINGLE_TASK_KEY]
+
+    def log_prob_of_y_samples(self, data, num_samples, training=None, mask=None):
+        x, _ = data
+        logits = self.compute_logits(x, training=training, mask=mask)
+
+        samples = tfp.distributions.Categorical(logits=logits).sample([num_samples])
+        samples = tf.one_hot(samples, depth=tf.shape(logits)[-1])
+
+        log_probs = tf.nn.log_softmax(logits, axis=-1)
+        log_probs = tf.einsum("bc,sbc->sb", log_probs, tf.cast(samples, tf.float32))
+
+        return log_probs
 
 
 def get_untrained_bert(architecture, tasks, fetch_dir=None):

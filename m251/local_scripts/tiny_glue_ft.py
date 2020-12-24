@@ -52,13 +52,14 @@ from m251.data.glue import glue
         "bert-for-tf2",
         "google-auth",
         "google-cloud-storage",
+        "h5py",
         "params-flow",
         "pinject",
         "psycopg2-binary",
         "requests",
         "sshtunnel",
-        "tensorflow-datasets",
-        "tensorflow-probability",
+        "tensorflow-datasets==4.1.0",
+        "tensorflow-probability==0.11.1",
         "transformers",
     ],
 )
@@ -131,7 +132,9 @@ class FinetuneIsoParams(object):
         for reg_str in REG_STRENGTHS
     ],
     fixed_params={
-        "pretrained_model": "tiny",
+        # "pretrained_model": "large",
+        # "pretrained_model": "tiny",
+        "pretrained_model": "base",
         # NOTE: Here None means use all training examples.
         "batch_size": 8,
         # NOTE: See if we need 64 or 128 tokens for GLUE.
@@ -152,6 +155,7 @@ class FinetuneIsoParams(object):
     ### Need to add these bindings:
     #
     bindings=[
+        # scopes.ArgNameBindingSpec("with_validation", False),
         scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
         scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
         scopes.ArgNameBindingSpec("compiled_model", gc_exe.bert_finetuning_model),

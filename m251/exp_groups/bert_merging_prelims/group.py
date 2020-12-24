@@ -7,7 +7,7 @@ from del8.storages.gcp import gcp
 
 
 @group.group(
-    uuid="a982ac2a4f964f879e514ae2a8d4b1eb",
+    uuid="6eebd2c79d6248eb8c61fc7419c6dc45",
     # We use all of the default values for the gcp storage.
     storage_params=gcp.GcpStorageParams(),
     name="Merging of fine-tuned BERT models on GLUE preliminary experiments.",
@@ -23,13 +23,14 @@ from del8.storages.gcp import gcp
         "bert-for-tf2",
         "google-auth",
         "google-cloud-storage",
+        "h5py",
         "params-flow",
         "pinject",
         "psycopg2-binary",
         "requests",
         "sshtunnel",
-        "tensorflow-datasets",
-        "tensorflow-probability",
+        "tensorflow-datasets==4.1.0",
+        "tensorflow-probability==0.11.1",
         "transformers",
     ],
 )
