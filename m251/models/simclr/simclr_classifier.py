@@ -130,7 +130,7 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
     def get_mergeable_variables(self):
         # Should return list of tf.Variables.
-        return self.saved_keras_model.get_trainable_weights()
+        return self.saved_keras_model.trainable_weights
 
     #############################################
 
