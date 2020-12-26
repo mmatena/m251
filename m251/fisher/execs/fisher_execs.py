@@ -37,7 +37,5 @@ def fisher_matrix_saver(fisher_matrix, storage, fisher_type):
 def fisher_computation(dataset, compiled_fisher_computer, _fisher_matrix_saver):
     compiled_fisher_computer.fit(dataset, epochs=1)
     fisher_matrix = compiled_fisher_computer.get_fisher_matrix()
-    # NOTE: I might want to pass the blob_uuid to the returned value of
-    # this executable if ever use the result.
     saved_fisher_matrix = _fisher_matrix_saver(fisher_matrix)
     return saved_fisher_matrix

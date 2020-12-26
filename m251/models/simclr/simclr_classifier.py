@@ -1,30 +1,22 @@
 """TODO: Add title."""
-import bert
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from m251.data.image.constants import IMAGE_CLASSIFICATION_NUM_LABELS
 from m251.models import model_abcs
 
-from . import bert as bert_common
+from . import simclr as simclr_common
 
 
-class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
-    def __init__(self, bert_layer, tasks, **kwargs):
+class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
+    def __init__(self, saved_model, tasks, **kwargs):
         super().__init__(**kwargs)
-        self.bert_layer = bert_layer
+        self.saved_model = saved_model
+        self.saved_keras_model = saved_model.model
+
         self.tasks = tasks
         self.num_tasks = len(tasks)
-        self.num_classes = [_NUM_GLUE_LABELS[t] for t in tasks]
-
-        self.heads = [
-            tf.keras.layers.Dense(
-                units,
-                activation=None,
-                # kernel_regularizer=tf.keras.regularizers.l2(lmbda_head),
-                name=f"classifier_head_{i}",
-            )
-            for i, units in enumerate(self.num_classes)
-        ]
+        self.num_classes = [IMAGE_CLASSIFICATION_NUM_LABELS[t] for t in tasks]
 
         # TODO: There is probably a better way to get this custom loss working.
         self.custom_loss = _make_multitask_loss(
@@ -32,23 +24,31 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
             num_tasks=self.num_tasks,
         )
 
+        self.heads = [
+            tf.keras.layers.Dense(
+                units,
+                activation=None,
+                name=f"classifier_head_{i}",
+            )
+            for i, units in enumerate(self.num_classes)
+        ]
         self.regularizers = []
 
+    #############################################
+
     def call(self, x, training=None, mask=None):
-        inputs = [x[f"task_{i}_input_ids"] for i in range(self.num_tasks)]
-        token_type_ids = [x[f"task_{i}_token_type_ids"] for i in range(self.num_tasks)]
+        del mask
+        inputs = [x[f"task_{i}_image"] for i in range(self.num_tasks)]
         num_task_examples = [tf.shape(inpt)[0] for inpt in inputs]
         all_inputs = tf.concat(inputs, axis=0)
-        all_token_type_ids = tf.concat(token_type_ids, axis=0)
 
-        all_out = self.bert_layer(
-            [all_inputs, all_token_type_ids], training=training, mask=mask
+        # NOTE: Not exactly sure if the `trainable` kwarg has the desired effect here.
+        # NOTE: We get an error that a gradient does not exist if we set trainable to True.
+        # all_out = self.saved_model(all_inputs, trainable=bool(training))
+        all_out = self.saved_model(all_inputs, trainable=False)
+        outs = tf.split(
+            all_out["final_avg_pool"], num_or_size_splits=num_task_examples, axis=0
         )
-
-        # Get the CLS token representation.
-        all_out = all_out[..., 0, :]
-
-        outs = tf.split(all_out, num_or_size_splits=num_task_examples, axis=0)
 
         return {
             f"task_{i}": head(out, training=training)
@@ -80,21 +80,14 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         self.compiled_metrics.update_state(y, y_pred)
         return {m.name: m.result() for m in self.metrics}
 
-    ############################################
+    #############################################
 
-    def create_dummy_inputs(self, sequence_length):
+    def create_dummy_inputs(self, image_size):
         inputs = {}
-        dummy_input = tf.keras.Input([sequence_length], dtype=tf.int32)
+        dummy_input = tf.keras.Input([*image_size, 3], dtype=tf.float32)
         for i in range(self.num_tasks):
-            inputs[f"task_{i}_input_ids"] = dummy_input
-            inputs[f"task_{i}_token_type_ids"] = dummy_input
+            inputs[f"task_{i}_image"] = dummy_input
         return inputs
-
-    def load_pretrained_weights(self, pretrained_name, fetch_dir=None):
-        bert_ckpt = bert_common.get_pretrained_checkpoint(
-            pretrained_name, fetch_dir=fetch_dir
-        )
-        bert.load_bert_weights(self.bert_layer, bert_ckpt)
 
     def create_metrics(self):
         return {
@@ -102,43 +95,55 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
             for i, name in enumerate(self.tasks)
         }
 
-    ############################################
+    #############################################
+    #############################################
 
     def assert_single_task(self):
         assert len(self.num_classes) == 1
 
-    def get_mergeable_body(self):
-        return self.bert_layer
+    def add_regularizer(self, regularizer):
+        self.regularizers.append(regularizer)
 
-    def get_mergeable_variables(self):
-        return self.get_mergeable_body().trainable_weights
-
-    def get_heads(self):
-        return list(self.heads)
+    #############################################
 
     def get_classifier_head(self):
         self.assert_single_task()
         return self.heads[0]
 
+    def get_classifier_heads(self):
+        # Make a defensive copy of the heads list.
+        return list(self.heads)
+
     def set_classifier_heads(self, heads):
-        assert len(heads) == len(self.heads)
         for old, new in zip(self.heads, heads):
-            new(tf.keras.Input([self.bert_layer.params.hidden_size]))
+            # NOTE: I think the new heads will have to built. I can either
+            # do that here or make sure I do it before passing in the heads.
+            # I'll hold off on anything now, but this is probably the issue
+            # if you get an exception here.
             old.set_weights(new.get_weights())
 
-    def add_regularizer(self, regularizer):
-        self.regularizers.append(regularizer)
+    #############################################
 
-    ############################################
+    def get_mergeable_body(self):
+        # Probably should return something like a keras layer.
+        return self.saved_keras_model
+
+    def get_mergeable_variables(self):
+        # Should return list of tf.Variables.
+        return self.saved_keras_model.get_trainable_weights()
+
+    #############################################
 
     def compute_logits(self, x, training=None, mask=None):
+        del mask
         self.assert_single_task()
-        logits = self(x, training=training, mask=mask)
+        logits = self(x, training=training)
         return logits[self.SINGLE_TASK_KEY]
 
     def log_prob_of_y_samples(self, data, num_samples, training=None, mask=None):
+        del mask
         x, _ = data
-        logits = self.compute_logits(x, training=training, mask=mask)
+        logits = self.compute_logits(x, training=training)
 
         samples = tfp.distributions.Categorical(logits=logits).sample([num_samples])
         samples = tf.one_hot(samples, depth=tf.shape(logits)[-1])
@@ -149,9 +154,9 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         return log_probs
 
 
-def get_untrained_bert(architecture, tasks, fetch_dir=None):
-    bert_layer = bert_common.get_bert_layer(architecture, fetch_dir=fetch_dir)
-    return BertGlueClassifier(bert_layer, tasks=tasks)
+def get_initialized_simclr(model_name, tasks, fetch_dir=None):
+    saved_model = simclr_common.get_pretrained_simclr(model_name, fetch_dir=fetch_dir)
+    return SimclrClassifier(saved_model, tasks=tasks)
 
 
 def _make_multitask_loss(loss, num_tasks):
@@ -162,16 +167,3 @@ def _make_multitask_loss(loss, num_tasks):
         return tf.reduce_mean(per_task_losses)
 
     return multitask_loss
-
-
-_NUM_GLUE_LABELS = {
-    "cola": 2,
-    "mnli": 3,
-    "mrpc": 2,
-    "sst2": 2,
-    "stsb": 1,
-    "qqp": 2,
-    "qnli": 2,
-    "rte": 2,
-    "wnli": 2,
-}

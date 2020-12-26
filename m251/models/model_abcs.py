@@ -30,6 +30,10 @@ class MergeableModel(abc.ABC):
     def get_classifier_head(self):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def set_classifier_heads(self, heads):
+        raise NotImplementedError
+
     #############################################
 
     @abc.abstractmethod

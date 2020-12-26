@@ -89,3 +89,29 @@ class DiagonalFisherMatrix(fisher_abcs.FisherMatrix):
 
     def save(self, file):
         hdf5_util.save_variables_to_hdf5(self.fisher_diagonals, file)
+
+
+def merge_models(merged_model, mergeable_models, weighting=None, min_fisher=1e-6):
+    if not weighting:
+        weighting = len(mergeable_models) * [1.0]
+
+    assert len(mergeable_models) == len(weighting)
+
+    for i, var in enumerate(merged_model.get_mergeable_variables()):
+        lhs = tf.zeros_like(var)
+        rhs = tf.zeros_like(var)
+        for weight, mm in zip(weighting, mergeable_models):
+            model = mm.model
+            fisher_matrix = mm.fisher_matrix
+
+            diag = fisher_matrix.fisher_diagonals[i]
+            diag = tf.maximum(diag, min_fisher)
+
+            lhs += weight * diag
+            rhs += weight * diag * model.get_mergeable_variables()[i]
+        var.assign(rhs / lhs)
+
+    heads = [m.model.get_classifier_head() for m in mergeable_models]
+    merged_model.set_classifier_heads(heads)
+
+    return merged_model

@@ -81,15 +81,15 @@ def regularize_body_l2_from_initial(model, reg_strength=0.0):
     if not reg_strength:
         return model
 
-    og_weights = [tf.identity(w) for w in model.trainable_weights]
+    og_weights = [tf.identity(w) for w in model.get_mergeable_variables()]
 
     def regularizer(model_during_training):
-        trainable_weights = model_during_training.trainable_weights
+        trainable_weights = model_during_training.get_mergeable_variables()
         from_pt_l2 = [
             tf.reduce_sum(tf.square(w - og_w))
             for og_w, w in zip(og_weights, trainable_weights)
         ]
-        return tf.reduce_sum(from_pt_l2)
+        return reg_strength * tf.reduce_sum(from_pt_l2)
 
     model.add_regularizer(regularizer)
 
@@ -140,3 +140,6 @@ def bert_finetuning_model(
         model.compile(**kwargs)
 
     return model
+
+
+###############################################################################

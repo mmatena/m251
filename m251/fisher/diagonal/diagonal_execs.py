@@ -1,4 +1,5 @@
 """TODO: Add title."""
+from absl import logging
 import tensorflow as tf
 
 from del8.core.di import executable
@@ -40,3 +41,76 @@ def diagonal_fisher_computer(
             computer.compile()
 
     return computer
+
+
+###############################################################################
+
+
+class MergableModel(object):
+    def __init__(self, model, fisher_matrix):
+        self.model = model
+        self.fisher_matrix = fisher_matrix
+
+
+@executable.executable(
+    default_bindings={
+        "initializer": gc_exe.bert_initializer,
+        "loader": ckpt_exec.checkpoint_loader,
+        "builder": gc_exe.bert_builder,
+    },
+)
+def diagonal_mergeable_model_from_checkpoint(
+    checkpoint,
+    checkpoint_to_fisher_matrix_uuid,
+    _initializer,
+    _builder,
+    _loader,
+    storage,
+):
+    with tf.device("/cpu"):
+        with scopes.binding_by_name_scope("checkpoint", checkpoint):
+            ft_model = _initializer()
+            with scopes.binding_by_name_scope("model", ft_model):
+                ft_model = _builder(ft_model)
+                ft_model = _loader(ft_model)
+
+        fisher_matrix_uuid = checkpoint_to_fisher_matrix_uuid[checkpoint]
+        logging.info(f"Loading saved fisher matrix: {fisher_matrix_uuid}")
+        with storage.retrieve_blob_as_tempfile(fisher_matrix_uuid) as f:
+            fisher_matrix = diagonal.DiagonalFisherMatrix.load(f.name)
+
+        return MergableModel(model=ft_model, fisher_matrix=fisher_matrix)
+
+
+###############################################################################
+
+
+@executable.executable(
+    default_bindings={
+        "initializer": gc_exe.bert_initializer,
+        "builder": gc_exe.bert_builder,
+        "metrics": gc_exe.glue_finetuning_metrics,
+    },
+)
+def diagonal_model_merger(
+    mergeable_models,
+    weighting,
+    _initializer,
+    _builder,
+    _metrics=None,
+    min_fisher=1e-6,
+):
+    merged = _initializer()
+    with scopes.binding_by_name_scope("model", merged):
+        merged = _builder(merged)
+        with tf.device("/cpu"):
+            merged = diagonal.merge_models(
+                merged, mergeable_models, weighting, min_fisher=min_fisher
+            )
+
+        compile_kwargs = {}
+        if _metrics:
+            compile_kwargs["metrics"] = _metrics(merged)
+
+        merged.compile(**compile_kwargs)
+    return merged
