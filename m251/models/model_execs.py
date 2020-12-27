@@ -29,7 +29,7 @@ def regularize_body_l2_from_initial(model, reg_strength=0.0):
 
 
 @executable.executable()
-def multitask_classification_metrics(tasks):
+def multitask_classification_metrics(model, tasks):
     return {
         f"task_{i}": tf.keras.metrics.SparseCategoricalAccuracy(name=f"{name}_acc")
         for i, name in enumerate(tasks)

@@ -1,4 +1,5 @@
 """Code for computing a diagonal approximation to the Fisher."""
+from absl import logging
 import tensorflow as tf
 
 from del8.core.utils import hdf5_util
@@ -37,6 +38,12 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
 
         grads = tape.jacobian(log_probs, trainable_weights)
         for g, fisher in zip(grads, self.fisher_diagonals):
+            if g is None:
+                logging.info(
+                    f"No gradients found for {fisher.name}. Skipping fisher "
+                    "computing computation for those variables."
+                )
+                continue
             # g.shape = [batch, num_classes, *var.shape]
             update = tf.tensordot(probs, tf.square(g), [[0, 1], [0, 1]])
             fraction_of_total = batch_size / float(self.total_examples)
@@ -56,16 +63,25 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
 
             batch_size = tf.cast(tf.shape(log_probs)[1], tf.float32)
 
+            log_prob_index = 0
             for log_prob in log_probs:
                 with tape.stop_recording():
                     grads = tape.jacobian(log_prob, trainable_weights)
                     for g, fisher in zip(grads, self.fisher_diagonals):
+                        if g is None:
+                            if log_prob_index == 0:
+                                logging.info(
+                                    f"No gradients found for {fisher.name}. Skipping fisher "
+                                    "computing computation for those variables."
+                                )
+                            continue
                         # g.shape = [batch, *var.shape]
                         update = tf.reduce_sum(tf.square(g), axis=0)
                         fraction_of_total = batch_size / tf.cast(
                             self.total_examples * self.y_samples, tf.float32
                         )
                         fisher.assign_add(fraction_of_total * update)
+                log_prob_index += 1
 
         return {}
 

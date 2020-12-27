@@ -9,10 +9,9 @@ from . import simclr as simclr_common
 
 
 class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
-    def __init__(self, saved_model, tasks, **kwargs):
+    def __init__(self, base, tasks, **kwargs):
         super().__init__(**kwargs)
-        self.saved_model = saved_model
-        self.saved_keras_model = saved_model.model
+        self.base = base
 
         self.tasks = tasks
         self.num_tasks = len(tasks)
@@ -42,13 +41,9 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
         num_task_examples = [tf.shape(inpt)[0] for inpt in inputs]
         all_inputs = tf.concat(inputs, axis=0)
 
-        # NOTE: Not exactly sure if the `trainable` kwarg has the desired effect here.
-        # NOTE: We get an error that a gradient does not exist if we set trainable to True.
-        # all_out = self.saved_model(all_inputs, trainable=bool(training))
-        all_out = self.saved_model(all_inputs, trainable=False)
-        outs = tf.split(
-            all_out["final_avg_pool"], num_or_size_splits=num_task_examples, axis=0
-        )
+        all_out = self.base(all_inputs, training=training)
+
+        outs = tf.split(all_out, num_or_size_splits=num_task_examples, axis=0)
 
         return {
             f"task_{i}": head(out, training=training)
@@ -66,8 +61,8 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
         trainable_vars = self.trainable_variables
         gradients = tape.gradient(loss, trainable_vars)
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
 
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
         self.compiled_metrics.update_state(y, y_pred)
 
         ret = {"loss": loss}
@@ -126,11 +121,11 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
     def get_mergeable_body(self):
         # Probably should return something like a keras layer.
-        return self.saved_keras_model
+        return self.base
 
     def get_mergeable_variables(self):
         # Should return list of tf.Variables.
-        return self.saved_keras_model.trainable_weights
+        return self.base.trainable_weights
 
     #############################################
 
@@ -155,8 +150,8 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
 
 def get_initialized_simclr(model_name, tasks, fetch_dir=None):
-    saved_model = simclr_common.get_pretrained_simclr(model_name, fetch_dir=fetch_dir)
-    return SimclrClassifier(saved_model, tasks=tasks)
+    base = simclr_common.get_pretrained_simclr(model_name, fetch_dir=fetch_dir)
+    return SimclrClassifier(base, tasks=tasks)
 
 
 def _make_multitask_loss(loss, num_tasks):

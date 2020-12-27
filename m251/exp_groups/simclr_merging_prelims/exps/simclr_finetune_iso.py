@@ -72,6 +72,60 @@ class FinetuneIsoParams(object):
         ] + reg_bindings
 
 
+############################################
+############################################
+
+
+@data_class.data_class()
+class FinetuneIsoEvalParams(object):
+    def __init__(
+        self,
+        checkpoints_summary,
+        pretrained_model,
+        task,
+        reg_type,
+        reg_strength,
+        num_examples,
+        batch_size,
+        image_size,
+    ):
+        pass
+
+    def create_binding_specs(self):
+
+        return [
+            scopes.ArgNameBindingSpec("checkpoints_summary", self.checkpoints_summary),
+            scopes.ArgNameBindingSpec("pretrained_model", self.pretrained_model),
+            scopes.ArgNameBindingSpec("tasks", [self.task]),
+            scopes.ArgNameBindingSpec("reg_type", self.reg_type),
+            scopes.ArgNameBindingSpec("reg_strength", self.reg_strength),
+            scopes.ArgNameBindingSpec("num_examples", self.num_examples),
+            scopes.ArgNameBindingSpec("batch_size", self.batch_size),
+            scopes.ArgNameBindingSpec("image_size", self.image_size),
+        ]
+
+
+def create_varying_eval_params(eval_exp, train_exp):
+    run_uuids = train_exp.retrieve_run_uuids(RunState.FINISHED)
+
+    varying_params = []
+    for run_uuid in run_uuids:
+        run_params = train_exp.retrieve_run_params(run_uuid)
+        ckpt_summary = train_exp.retrieve_checkpoints_summary(run_uuid)
+        varying_params.append(
+            {
+                "checkpoints_summary": ckpt_summary,
+                "pretrained_model": run_params.pretrained_model,
+                "task": run_params.task,
+                # NOTE: Not needed for eval, but add so we can have the same
+                # run key between the training and evaluation runs.
+                "reg_strength": run_params.reg_strength,
+                "reg_type": run_params.reg_type,
+            }
+        )
+    return varying_params
+
+
 ###############################################################################
 ###############################################################################
 
@@ -111,6 +165,50 @@ class FinetuneIsoParams(object):
     ],
 )
 class FinetuneSimclrIso_r50_1x(object):
+    def create_run_instance_config(self, params):
+        return runs.RunInstanceConfig(
+            global_binding_specs=params.create_binding_specs()
+        )
+
+
+############################################
+############################################
+
+
+@experiment.experiment(
+    uuid="e6639409b748455187c011c87c7ae5c6",
+    group=SimclrMergingPrelimsGroup,
+    params_cls=FinetuneIsoEvalParams,
+    executable_cls=eval_execs.evaluate_from_checkpoints_summary,
+    varying_params=functools.partial(
+        create_varying_eval_params, train_exp=FinetuneSimclrIso_r50_1x
+    ),
+    fixed_params={
+        "batch_size": 32,
+        "image_size": simclr.IMAGE_SIZE,
+        "num_examples": 4096,
+    },
+    key_fields={
+        # Same as from the training experiment.
+        "pretrained_model",
+        "task",
+        "reg_strength",
+        "reg_type",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec(
+            "dataset", image_classification.simclr_finetuning_dataset
+        ),
+        #
+        scopes.ArgNameBindingSpec("compiled_model", sc_exe.simclr_finetuning_model),
+    ],
+)
+class FinetuneSimclrIsoEval_r50_1x(object):
     def create_run_instance_config(self, params):
         return runs.RunInstanceConfig(
             global_binding_specs=params.create_binding_specs()

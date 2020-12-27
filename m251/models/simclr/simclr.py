@@ -5,12 +5,16 @@ to it for the sake of brevity.
 
 NOTE: I am also only considering models without the selective kernels.
 """
-from absl import logging
-
 import os
 import shutil
 
+from absl import logging
+
 import tensorflow as tf
+
+from del8.core.utils import tf_util
+
+from . import resnet
 
 
 # SimCLR deals only with images resized to this size.
@@ -21,7 +25,14 @@ _GC_PRETRAINED_BASE_PATH = "gs://simclr-checkpoints-tf2/simclrv2/pretrained"
 _DEFAULT_FETCH_DIR = "~/.pretrained_simclrv2"
 
 
-_PRETRAINED_MODELS = {"r50_1x", "r50_2x", "r101_1x", "r101_2x", "r152_1x", "r152_2x"}
+_PRETRAINED_MODELS_TO_PARAMS = {
+    "r50_1x": (50, 1),
+    "r50_2x": (50, 2),
+    "r101_1x": (101, 1),
+    "r101_2x": (101, 2),
+    "r152_1x": (152, 1),
+    "r152_2x": (152, 2),
+}
 
 
 def _copy_from_gcs(src, dst):
@@ -45,7 +56,7 @@ def get_pretrained_simclr_checkpoint(model_name, fetch_dir=None):
     if not os.path.exists(fetch_dir):
         os.mkdir(fetch_dir)
 
-    if model_name not in _PRETRAINED_MODELS:
+    if model_name not in _PRETRAINED_MODELS_TO_PARAMS:
         raise ValueError(f"SimCLR model not found: {model_name}")
 
     full_model_name = f"{model_name}_sk0"
@@ -66,8 +77,33 @@ def get_pretrained_simclr_checkpoint(model_name, fetch_dir=None):
     return os.path.join(local_dir, "saved_model")
 
 
-def get_pretrained_simclr(model_name, fetch_dir=None):
-    saved_model = get_pretrained_simclr_checkpoint(model_name, fetch_dir=fetch_dir)
-    # We need to set compile=False or else we end up not being able to access the
-    # trainable weights.
-    return tf.keras.models.load_model(saved_model, compile=False)
+def get_pretrained_simclr(model_name, image_size=IMAGE_SIZE, fetch_dir=None):
+    saved_model_path = get_pretrained_simclr_checkpoint(model_name, fetch_dir=fetch_dir)
+    # We suppress logs at warning or lower as loading the model generates a lot of
+    # useless warnining logs.
+    with tf_util.logging_level("ERROR"):
+        with tf.device("cpu"):
+            # We need to set compile=False or else we end up not being able to access the
+            # trainable weights.
+            saved_model = tf.keras.models.load_model(saved_model_path, compile=False)
+
+    name_to_saved_weight = {
+        v.name.replace("sync_batch_normalization", "batch_normalization"): v
+        for v in saved_model.model.trainable_variables
+    }
+
+    depth, width_multiplier = _PRETRAINED_MODELS_TO_PARAMS[model_name]
+    model = resnet.SimClrBaseModel(depth=depth, width_multiplier=width_multiplier)
+
+    # Build the model.
+    dummy_input = tf.keras.Input([*image_size, 3], dtype=tf.float32)
+    model(dummy_input)
+
+    for v in model.trainable_variables:
+        name = v.name
+        if name.startswith("sim_clr_base_model/"):
+            name = name[len("sim_clr_base_model/") :]
+        saved_weight = name_to_saved_weight[name]
+        v.assign(saved_weight)
+
+    return model
