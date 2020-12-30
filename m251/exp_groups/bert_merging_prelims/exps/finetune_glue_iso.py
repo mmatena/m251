@@ -13,7 +13,10 @@ from del8.executables.models import checkpoints as ckpt_exec
 from del8.executables.training import fitting
 from del8.executables.training import optimizers
 
+from m251.models import model_execs
 from m251.models.bert import glue_classifier_execs as gc_exe
+from m251.models.bert import glue_metric_execs as metrics_exe
+
 from m251.data.glue import glue
 
 from ..group import BertMergingPrelimsGroup
@@ -47,7 +50,7 @@ class FinetuneIsoParams(object):
         if self.reg_type == "iso":
             reg_bindings = [
                 scopes.ArgNameBindingSpec(
-                    "regularizer", gc_exe.regularize_body_l2_from_initial
+                    "regularizer", model_execs.regularize_body_l2_from_initial
                 ),
                 scopes.ArgNameBindingSpec("reg_strength", self.reg_strength),
             ]
@@ -103,23 +106,38 @@ class FinetuneIsoEvalParams(object):
 
 
 def create_varying_eval_params(eval_exp, train_exp):
+    with eval_exp.get_storage(), train_exp.get_storage():
+        return _create_varying_eval_params(eval_exp, train_exp)
+
+
+def _create_varying_eval_params(eval_exp, train_exp):
     run_uuids = train_exp.retrieve_run_uuids(RunState.FINISHED)
 
     varying_params = []
     for run_uuid in run_uuids:
         run_params = train_exp.retrieve_run_params(run_uuid)
         ckpt_summary = train_exp.retrieve_checkpoints_summary(run_uuid)
-        varying_params.append(
-            {
-                "checkpoints_summary": ckpt_summary,
-                "pretrained_model": run_params.pretrained_model,
-                "task": run_params.task,
-                # NOTE: Not needed for eval, but add so we can have the same
-                # run key between the training and evaluation runs.
-                "reg_strength": run_params.reg_strength,
-                "reg_type": run_params.reg_type,
-            }
-        )
+
+        param = {
+            "checkpoints_summary": ckpt_summary,
+            "pretrained_model": run_params.pretrained_model,
+            # NOTE: Not needed for eval, but add so we can have the same
+            # run key between the training and evaluation runs.
+            "reg_strength": run_params.reg_strength,
+            "reg_type": run_params.reg_type,
+        }
+
+        task = run_params.task
+        if task == "mnli":
+            raise NotImplementedError("TODO: Need to change handling on MNLI here.")
+            for s in ["", "mis"]:
+                p = param.copy()
+                p["task"] = f"mnli_{s}matched"
+                varying_params.append(p)
+        else:
+            param["task"] = task
+            varying_params.append(param)
+
     return varying_params
 
 
@@ -297,6 +315,104 @@ class FinetuneGlueIsoExperiment_Large(object):
     ],
 )
 class FinetuneGlueIsoEval_Large(object):
+    def create_run_instance_config(self, params):
+        return runs.RunInstanceConfig(
+            global_binding_specs=params.create_binding_specs()
+        )
+
+
+###############################################################################
+###############################################################################
+
+ROBERTA_TASKS = ("qqp", "sst2", "qnli", "mrpc", "rte", "mnli", "cola", "stsb")
+ROBERTA_REG_STRENGTHS = (1e-2, 3e-4, 0.0)
+
+
+@experiment.experiment(
+    uuid="77bcd6be482e421495e3564e062fd6b8",
+    group=BertMergingPrelimsGroup,
+    params_cls=FinetuneIsoParams,
+    executable_cls=fitting.training_run,
+    # NOTE: Create these partials from concise descriptors later.
+    varying_params=[
+        {"task": task, "reg_strength": reg_str}
+        for task in ROBERTA_TASKS
+        for reg_str in ROBERTA_REG_STRENGTHS
+    ],
+    fixed_params={
+        "pretrained_model": "roberta-large",
+        "batch_size": 8,
+        "reg_type": "iso",
+        # NOTE: See if we need 64 or 128 tokens for GLUE.
+        "sequence_length": 64,
+        # NOTE: Here None means use all training examples.
+        "train_examples": None,
+        "validation_examples": 4096,
+        # NOTE: I should find a way to specific these cleaner.
+        "examples_per_epoch": 25_000,
+        "num_epochs": 200_000 // 25_000,
+        "learning_rate": 1e-5,
+    },
+    key_fields={"pretrained_model", "task", "reg_strength", "reg_type"},
+    bindings=[
+        # For some reason, validation can cause the program to hang indefinitely.
+        scopes.ArgNameBindingSpec("with_validation", False),
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        scopes.ArgNameBindingSpec("compiled_model", gc_exe.bert_finetuning_model),
+        scopes.ArgNameBindingSpec("optimizer", optimizers.adam_optimizer),
+        scopes.ArgNameBindingSpec("callbacks", ckpt_exec.checkpoint_saver_callback),
+    ],
+)
+class FinetuneGlueIsoExperiment_RobertaLarge(object):
+    def create_run_instance_config(self, params):
+        return runs.RunInstanceConfig(
+            global_binding_specs=params.create_binding_specs()
+        )
+
+
+############################################
+############################################
+
+
+@experiment.experiment(
+    uuid="a95a92562a2f41239cd992a05e23e42a",
+    group=BertMergingPrelimsGroup,
+    params_cls=FinetuneIsoEvalParams,
+    executable_cls=eval_execs.evaluate_from_checkpoints_summary,
+    # NOTE: Create these partials from concise descriptors later.
+    varying_params=functools.partial(
+        create_varying_eval_params, train_exp=FinetuneGlueIsoExperiment_RobertaLarge
+    ),
+    fixed_params={
+        "batch_size": 8,
+        "sequence_length": 64,
+        "num_examples": 4096,
+    },
+    key_fields={
+        # Same as from the training experiment. Note that task
+        # will be different for MNLI.
+        "pretrained_model",
+        "task",
+        "reg_strength",
+        "reg_type",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("split", "validation"),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("compiled_model", gc_exe.bert_finetuning_model),
+    ],
+)
+class FinetuneGlueIsoRobustEval_RobertaLarge(object):
     def create_run_instance_config(self, params):
         return runs.RunInstanceConfig(
             global_binding_specs=params.create_binding_specs()

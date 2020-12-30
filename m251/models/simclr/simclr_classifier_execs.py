@@ -11,8 +11,7 @@ from . import simclr_classifier
 
 @executable.executable(
     pip_packages=[
-        "simclr-for-tf2",
-        "transformers",
+        "transformers==3.0.2",
     ],
 )
 def simclr_initializer(pretrained_model, tasks, fetch_dir=None):

@@ -11,7 +11,7 @@ from . import glue_classifier as bert_gc
 @executable.executable(
     pip_packages=[
         "bert-for-tf2",
-        "transformers",
+        "transformers==3.0.2",
     ],
 )
 def bert_initializer(pretrained_model, tasks, fetch_dir=None):
@@ -120,9 +120,6 @@ def bert_finetuning_model(
 ):
     model = _initializer()
 
-    # NOTE: Maybe add some way of binding a local variable via a closure so
-    # that we don't have to do something like this just in case the returned
-    # model is different the input model.
     with scopes.binding_by_name_scope("model", model):
         model = _builder(model)
         model = _loader(model)
@@ -140,6 +137,3 @@ def bert_finetuning_model(
         model.compile(**kwargs)
 
     return model
-
-
-###############################################################################

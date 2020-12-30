@@ -1,13 +1,15 @@
 """TODO: Add title."""
+import numpy as np
 import tensorflow as tf
 
 from transformers.data.processors import glue as hf_glue
 
 from del8.core.di import executable
 
-glue_tasks_num_labels = hf_glue.glue_tasks_num_labels
-glue_processors = hf_glue.glue_processors
-glue_output_modes = hf_glue.glue_output_modes
+from .constants import STSB_MIN, STSB_MAX, STSB_NUM_BINS
+
+_glue_processors = hf_glue.glue_processors
+_glue_output_modes = hf_glue.glue_output_modes
 
 
 def _to_hf_task_name(task):
@@ -15,11 +17,15 @@ def _to_hf_task_name(task):
         task = "sts-b"
     elif task == "sst2":
         task = "sst-2"
+    elif task == "mnli_matched":
+        task = "mnli"
+    elif task == "mnli_mismatched":
+        task = "mnli-mm"
     return task
 
 
 def convert_dataset_to_features(
-    dataset, tokenizer, max_length, task, pad_token=0, pad_token_segment_id=0
+    dataset, tokenizer, max_length, task, stsb_num_bins=STSB_NUM_BINS
 ):
     """Note that this is only for single examples; won't work with batched inputs.
 
@@ -30,13 +36,21 @@ def convert_dataset_to_features(
     over the returned dataset probably won't be a bottleneck with models used in practice.
     """
     task = _to_hf_task_name(task)
+    pad_token = tokenizer.pad_token_id
+    # NOTE: Not sure if this is correct, but it matches up for BERT. RoBERTa does
+    # not appear to use token types.
+    pad_token_segment_id = tokenizer.pad_token_type_id
 
-    processor = glue_processors[task]()
-    label_list = processor.get_labels()
-    output_mode = glue_output_modes[task]
-    assert output_mode == "classification", "TODO: Handle the one float task."
+    processor = _glue_processors[task]()
+    output_mode = _glue_output_modes[task]
 
-    label_map = {label: i for i, label in enumerate(label_list)}
+    if task == "sts-b":
+        # STS-B regression.
+        stsb_bins = np.linspace(STSB_MIN, STSB_MAX, num=stsb_num_bins + 1)
+        stsb_bins = stsb_bins[1:-1]
+    else:
+        label_list = processor.get_labels()
+        label_map = {label: i for i, label in enumerate(label_list)}
 
     def py_map_fn(keys, *values):
         example = {tf.compat.as_str(k.numpy()): v for k, v in zip(keys, values)}
@@ -55,7 +69,14 @@ def convert_dataset_to_features(
 
         input_ids = tf.constant(input_ids, dtype=tf.int32)
         token_type_ids = tf.constant(token_type_ids, dtype=tf.int32)
-        label = tf.constant(label_map[example.label], dtype=tf.int64)
+
+        if output_mode == "classification":
+            label = tf.constant(label_map[example.label], dtype=tf.int64)
+        else:
+            label = float(example.label)
+            assert 0.0 <= label <= 5.0, f"Out of range STS-B label {label}."
+            label = np.digitize(label, stsb_bins)
+            label = tf.constant(label, dtype=tf.int64)
         return input_ids, token_type_ids, label
 
     def map_fn(example):
@@ -97,7 +118,7 @@ def convert_dataset_to_features(
 
 
 @executable.executable(
-    pip_packages=["transformers"],
+    pip_packages=["transformers==3.0.2"],
 )
 def glue_preprocessor(dataset, task, tokenizer, sequence_length):
     return convert_dataset_to_features(

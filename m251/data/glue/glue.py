@@ -1,4 +1,6 @@
 """TODO: Add title."""
+import tensorflow as tf
+
 from del8.core.di import executable
 from del8.core.di import scopes
 
@@ -48,3 +50,82 @@ def glue_finetuning_dataset(
     mixture = _batcher(mixture)
 
     return mixture
+
+
+###############################################################################
+
+# (dataset_name, split, num_examples, batch_size) -> dataset
+# (dataset_name, split, num_examples, batch_size, 'labels') -> labels
+_ROBUST_VALIDATION_DATASET_CACHE = {}
+
+
+def _extract_labels(dataset):
+    labels = []
+    for _, minibatch_labels in dataset:
+        labels.append(minibatch_labels)
+    return tf.concat(labels, axis=0)
+
+
+def _handle_mnli(tasks):
+    new_tasks = []
+    for task in tasks:
+        if task != "mnli":
+            new_tasks.append(task)
+        else:
+            new_tasks.append("mnli_matched")
+            new_tasks.append("mnli_mismatched")
+    return new_tasks
+
+
+@executable.executable(
+    default_bindings={
+        "tfds_dataset": tfds_execs.tfds_dataset,
+        "preprocesser": glue_processing.glue_preprocessor,
+        "tokenizer": bert_common.bert_tokenizer,
+    }
+)
+def glue_robust_evaluation_dataset(
+    tasks,
+    _tfds_dataset,
+    _preprocesser,
+    batch_size,
+    num_examples=None,
+    split="validation",
+    cache_validation_datasets=True,
+):
+    datasets = {}
+
+    for task in _handle_mnli(tasks):
+        dataset_name = f"glue/{task}"
+
+        cache_key = (dataset_name, split, num_examples, batch_size)
+        label_cache_key = cache_key + ("labels",)
+        if cache_validation_datasets and cache_key in _ROBUST_VALIDATION_DATASET_CACHE:
+            datasets[task] = _ROBUST_VALIDATION_DATASET_CACHE[cache_key]
+            datasets[f"{task}_labels"] = _ROBUST_VALIDATION_DATASET_CACHE[
+                label_cache_key
+            ]
+            continue
+
+        task_bindings = [
+            ("task", task),
+            ("dataset_name", dataset_name),
+            ("split", split),
+        ]
+        with scopes.binding_by_name_scopes(task_bindings):
+            ds = _tfds_dataset()
+            if num_examples is not None:
+                ds = ds.take(num_examples)
+            ds = ds.cache()
+            ds = _preprocesser(ds)
+            ds = ds.batch(batch_size)
+            labels = _extract_labels(ds)
+
+        datasets[task] = ds
+        datasets[f"{task}_labels"] = labels
+
+        if cache_validation_datasets:
+            _ROBUST_VALIDATION_DATASET_CACHE[cache_key] = ds
+            _ROBUST_VALIDATION_DATASET_CACHE[label_cache_key] = labels
+
+    return datasets

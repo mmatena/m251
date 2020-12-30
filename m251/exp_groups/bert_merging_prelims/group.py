@@ -24,14 +24,17 @@ from del8.storages.gcp import gcp
         "google-auth",
         "google-cloud-storage",
         "h5py",
+        "numpy",
         "params-flow",
         "pinject",
         "psycopg2-binary",
         "requests",
+        "scikit-learn==0.23.1",
+        "scipy==1.4.1",
         "sshtunnel",
         "tensorflow-datasets==4.1.0",
         "tensorflow-probability==0.11.1",
-        "transformers",
+        "transformers==3.0.2",
     ],
 )
 class BertMergingPrelimsGroup(object):

@@ -3,6 +3,7 @@ import bert
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from m251.data.processing.constants import NUM_GLUE_LABELS
 from m251.models import model_abcs
 
 from . import bert as bert_common
@@ -14,7 +15,7 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         self.bert_layer = bert_layer
         self.tasks = tasks
         self.num_tasks = len(tasks)
-        self.num_classes = [_NUM_GLUE_LABELS[t] for t in tasks]
+        self.num_classes = [NUM_GLUE_LABELS[t] for t in tasks]
 
         self.heads = [
             tf.keras.layers.Dense(
@@ -33,6 +34,10 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         )
 
         self.regularizers = []
+
+    @property
+    def is_roberta(self):
+        return getattr(self.bert_layer, "is_roberta", False)
 
     def call(self, x, training=None, mask=None):
         inputs = [x[f"task_{i}_input_ids"] for i in range(self.num_tasks)]
@@ -82,6 +87,25 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
     ############################################
 
+    @tf.function
+    def compute_task_logits(self, task_inputs, task, training=False):
+        input_ids = task_inputs["input_ids"]
+        token_type_ids = task_inputs["token_type_ids"]
+
+        out = self.bert_layer([input_ids, token_type_ids], training=training)
+
+        # Get the CLS token representation.
+        out = out[..., 0, :]
+
+        task_index = self.tasks.index(task)
+        task_head = self.heads[task_index]
+        return task_head(out, training=training)
+
+    def get_num_classes_for_task(self, task):
+        return NUM_GLUE_LABELS[task]
+
+    ############################################
+
     def create_dummy_inputs(self, sequence_length):
         inputs = {}
         dummy_input = tf.keras.Input([sequence_length], dtype=tf.int32)
@@ -91,10 +115,9 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         return inputs
 
     def load_pretrained_weights(self, pretrained_name, fetch_dir=None):
-        bert_ckpt = bert_common.get_pretrained_checkpoint(
-            pretrained_name, fetch_dir=fetch_dir
+        bert_common.load_pretrained_weights(
+            self.bert_layer, pretrained_name, fetch_dir=fetch_dir
         )
-        bert.load_bert_weights(self.bert_layer, bert_ckpt)
 
     def create_metrics(self):
         return {
@@ -162,16 +185,3 @@ def _make_multitask_loss(loss, num_tasks):
         return tf.reduce_mean(per_task_losses)
 
     return multitask_loss
-
-
-_NUM_GLUE_LABELS = {
-    "cola": 2,
-    "mnli": 3,
-    "mrpc": 2,
-    "sst2": 2,
-    "stsb": 1,
-    "qqp": 2,
-    "qnli": 2,
-    "rte": 2,
-    "wnli": 2,
-}

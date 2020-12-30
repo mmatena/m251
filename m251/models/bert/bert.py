@@ -7,6 +7,8 @@ from transformers import BertTokenizer
 
 from del8.core.di import executable
 
+from . import roberta
+
 
 _DEFAULT_FETCH_DIR = "~/.pretrained_bert"
 
@@ -19,10 +21,14 @@ _BERT_MODELS_GOOGLE = {
     "large": "https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-24_H-1024_A-16.zip",
 }
 
+# NOTE: These are like 'roberta-large' and 'roberta-base', so there should be no overlap.
+_ROBERTA_CHECKPOINTS = roberta.ROBERTA_CHECKPOINTS
 
-def get_tokenizer(model=None):
+
+def get_tokenizer(pretrained_model=None):
+    if pretrained_model in _ROBERTA_CHECKPOINTS:
+        return roberta.get_tokenizer(pretrained_model)
     # TODO: Change as different models use different tokenizers.
-    del model
     return BertTokenizer.from_pretrained("bert-base-uncased")
 
 
@@ -45,19 +51,34 @@ def _get_google_bert_model(model_name, fetch_dir=None):
         return fetched_dir
 
 
+def get_bert_layer(model_name, fetch_dir=None, name="bert"):
+    if model_name in _ROBERTA_CHECKPOINTS:
+        # NOTE: This will be pretrained unlike if we chose a bert model.
+        return roberta.get_pretrained_roberta(model_name)
+
+    model_dir = _get_google_bert_model(model_name, fetch_dir)
+    bert_params = bert.params_from_pretrained_ckpt(model_dir)
+    bert_params.mask_zero = True
+    l_bert = bert.BertModelLayer.from_params(bert_params, name=name)
+
+    setattr(l_bert, "is_roberta", False)
+
+    return l_bert
+
+
 def get_pretrained_checkpoint(model_name, fetch_dir=None):
     model_dir = _get_google_bert_model(model_name, fetch_dir)
     model_ckpt = os.path.join(model_dir, "bert_model.ckpt")
     return model_ckpt
 
 
-def get_bert_layer(model_name, fetch_dir=None, name="bert"):
-    model_dir = _get_google_bert_model(model_name, fetch_dir)
-    bert_params = bert.params_from_pretrained_ckpt(model_dir)
-    bert_params.mask_zero = True
-    l_bert = bert.BertModelLayer.from_params(bert_params, name=name)
-
-    return l_bert
+def load_pretrained_weights(bert_layer, model_name, fetch_dir=None):
+    if getattr(bert_layer, "is_roberta", False):
+        # The RoBERTa layer will already have the pretrained weights loaded.
+        return bert_layer
+    ckpt = get_pretrained_checkpoint(model_name, fetch_dir=fetch_dir)
+    bert.load_bert_weights(bert_layer, ckpt)
+    return bert_layer
 
 
 ###############################################################################
@@ -66,7 +87,7 @@ def get_bert_layer(model_name, fetch_dir=None, name="bert"):
 @executable.executable(
     pip_packages=[
         "bert-for-tf2",
-        "transformers",
+        "transformers==3.0.2",
     ],
 )
 def bert_tokenizer(pretrained_model):

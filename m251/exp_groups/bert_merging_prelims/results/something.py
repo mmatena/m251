@@ -1,4 +1,4 @@
-"""TODO: Reorganize and rename."
+"""TODO: Reorganize and rename.
 
 
 export PYTHONPATH=$PYTHONPATH:~/Desktop/projects/m251:~/Desktop/projects/del8
@@ -204,20 +204,22 @@ def _something_joined(train_exp, eval_exp, merge_exp, ckpt_index):
 
 if True:
     pass
-    from m251.exp_groups.simclr_merging_prelims.exps import simclr_finetune_iso
-    from m251.exp_groups.simclr_merging_prelims.exps import simclr_diag_merge_iso
+    # from m251.exp_groups.simclr_merging_prelims.exps import simclr_finetune_iso
+    # from m251.exp_groups.simclr_merging_prelims.exps import simclr_diag_merge_iso
 
-    # from m251.exp_groups.bert_merging_prelims.exps import finetune_glue_iso
-    # from m251.exp_groups.bert_merging_prelims.exps import diag_merge_glue_iso
+    from m251.exp_groups.bert_merging_prelims.exps import finetune_glue_iso
+    from m251.exp_groups.bert_merging_prelims.exps import diag_merge_glue_iso
 
     # something_merges(diag_merge_glue_iso.DiagMergeGlueIsoExperiment_LastCkpt_Pairs_Base)
     # something_merges(diag_merge_glue_iso.DiagMergeGlueIsoExperiment_LastCkpt_Pairs_Large)
+    # something_merges(diag_merge_glue_iso.DiagMergeGlueIsoExperiment_BestCkpt_Pairs_RobertaLarge)
 
     # something_evals(finetune_glue_iso.FinetuneGlueIsoEval_Base)
     # something_evals(finetune_glue_iso.FinetuneGlueIsoEval_Large)
+    # something_evals(finetune_glue_iso.FinetuneGlueIsoRobustEval_RobertaLarge)
 
     # something_evals(simclr_finetune_iso.FinetuneSimclrIsoEval_r50_1x)
-    something_merges(simclr_diag_merge_iso.SimclrDiagMergeIso__r50_1x__ckpt_20k)
+    # something_merges(simclr_diag_merge_iso.SimclrDiagMergeIso__r50_1x__ckpt_20k)
 
     ############
 
@@ -233,13 +235,13 @@ if True:
     ############
 
     # result = something_joined(
-    #     train_exp=finetune_glue_iso.FinetuneGlueIsoExperiment_Base,
-    #     eval_exp=finetune_glue_iso.FinetuneGlueIsoEval_Base,
-    #     merge_exp=diag_merge_glue_iso.DiagMergeGlueIsoExperiment_LastCkpt_Pairs_Base,
+    #     train_exp=finetune_glue_iso.FinetuneGlueIsoExperiment_Large,
+    #     eval_exp=finetune_glue_iso.FinetuneGlueIsoEval_Large,
+    #     merge_exp=diag_merge_glue_iso.DiagMergeGlueIsoExperiment_LastCkpt_Pairs_Large,
     #     ckpt_index=-1,
     # )
     # # s = json.dumps(result, indent=2)
     # # print(s)
-    # json_path = os.path.expanduser('~/Desktop/projects/m251/local_results/bert_prelim_base.json')
+    # json_path = os.path.expanduser('~/Desktop/projects/m251/local_results/bert_prelim_large.json')
     # with open(json_path, "w") as f:
     #     json.dump(result, f, indent=2)

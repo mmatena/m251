@@ -53,7 +53,7 @@ class BatchNormRelu(tf.keras.layers.Layer):
         return inputs
 
 
-class DropBlock(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
+class DropBlock(tf.keras.layers.Layer):
     def __init__(
         self, keep_prob, dropblock_size, data_format="channels_last", **kwargs
     ):

@@ -60,7 +60,7 @@ from m251.data.glue import glue
         "sshtunnel",
         "tensorflow-datasets==4.1.0",
         "tensorflow-probability==0.11.1",
-        "transformers",
+        "transformers==3.0.2",
     ],
 )
 class TestGroup(object):

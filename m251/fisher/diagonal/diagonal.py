@@ -8,12 +8,13 @@ from .. import fisher_abcs
 
 
 class DiagonalFisherComputer(fisher_abcs.FisherComputer):
-    def __init__(self, model, total_examples, y_samples=None):
+    def __init__(self, model, total_examples, class_chunk_size=4096, y_samples=None):
         super().__init__()
 
         self.model = model
         self.total_examples = total_examples
         self.y_samples = y_samples
+        self.class_chunk_size = class_chunk_size
         self.fisher_diagonals = [
             tf.Variable(tf.zeros(w.shape), trainable=False, name=f"fisher/{w.name}")
             for w in model.get_mergeable_variables()
@@ -30,24 +31,44 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
         x, _ = data
         trainable_weights = self.model.get_mergeable_variables()
 
-        with tf.GradientTape() as tape:
+        with tf.GradientTape(persistent=True) as tape:
             logits = self.model.compute_logits(x, training=False)
             log_probs = tf.nn.log_softmax(logits, axis=-1)
         probs = tf.nn.softmax(logits)  # [batch, num_classes]
         batch_size = tf.cast(tf.shape(probs)[0], tf.float32)
+        num_classes = tf.cast(tf.shape(probs)[1], tf.float32)
 
-        grads = tape.jacobian(log_probs, trainable_weights)
-        for g, fisher in zip(grads, self.fisher_diagonals):
-            if g is None:
-                logging.info(
-                    f"No gradients found for {fisher.name}. Skipping fisher "
-                    "computing computation for those variables."
-                )
-                continue
-            # g.shape = [batch, num_classes, *var.shape]
-            update = tf.tensordot(probs, tf.square(g), [[0, 1], [0, 1]])
-            fraction_of_total = batch_size / float(self.total_examples)
-            fisher.assign_add(fraction_of_total * update)
+        num_chunks = tf.math.ceil(num_classes / float(self.class_chunk_size))
+        num_chunks = tf.cast(num_chunks, tf.int32)
+        for chunk_index in tf.range(num_chunks):
+            with tape:
+                log_probs_chunk = log_probs[
+                    ...,
+                    chunk_index
+                    * self.class_chunk_size : (chunk_index + 1)
+                    * self.class_chunk_size,
+                ]
+            probs_chunk = probs[
+                ...,
+                chunk_index
+                * self.class_chunk_size : (chunk_index + 1)
+                * self.class_chunk_size,
+            ]
+            actual_chunk_size = tf.cast(tf.shape(probs_chunk)[-1], tf.float32)
+
+            grads = tape.jacobian(log_probs_chunk, trainable_weights)
+            for g, fisher in zip(grads, self.fisher_diagonals):
+                if g is None:
+                    logging.info(
+                        f"No gradients found for {fisher.name}. Skipping fisher "
+                        "computing computation for those variables."
+                    )
+                    continue
+                # g.shape = [batch, num_classes, *var.shape]
+                update = tf.tensordot(probs_chunk, tf.square(g), [[0, 1], [0, 1]])
+                fraction_of_total = batch_size / float(self.total_examples)
+                fraction_of_total *= actual_chunk_size / num_classes
+                fisher.assign_add(fraction_of_total * update)
 
         return {}
 
@@ -131,3 +152,13 @@ def merge_models(merged_model, mergeable_models, weighting=None, min_fisher=1e-6
     merged_model.set_classifier_heads(heads)
 
     return merged_model
+
+
+def merge_models_with_weightings(
+    merged_model, mergeable_models, weightings, min_fisher=1e-6
+):
+    for weighting in weightings:
+        merged = merge_models(
+            merged_model, mergeable_models, weighting=weighting, min_fisher=min_fisher
+        )
+        yield merged

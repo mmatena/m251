@@ -1,6 +1,8 @@
 """TODO: Add title."""
 import tensorflow as tf
 
+from del8.core.di import executable
+
 
 def to_paragraphs(ds, max_paragraphs=32):
     def map_fn(x):
@@ -22,3 +24,11 @@ def to_paragraphs(ds, max_paragraphs=32):
     ds = ds.map(map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     ds = ds.flat_map(tf.data.Dataset.from_tensor_slices)
     return ds
+
+
+###############################################################################
+
+
+@executable.executable()
+def paragraphs_preprocessor(dataset, max_paragraphs=32):
+    return to_paragraphs(dataset, max_paragraphs=max_paragraphs)

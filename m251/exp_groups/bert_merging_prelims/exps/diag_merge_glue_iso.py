@@ -11,11 +11,14 @@ from del8.core.storage.storage import RunState
 from del8.core.utils.type_util import hashabledict
 
 from del8.executables.data import tfds as tfds_execs
+from del8.executables.evaluation import eval_execs
 
 from m251.data.glue import glue
 from m251.fisher.diagonal import diagonal_execs
 from m251.fisher.execs import fisher_execs
 from m251.fisher.execs import merging_execs
+
+from m251.models.bert import glue_metric_execs as metrics_exe
 
 from . import finetune_glue_iso
 from . import glue_fisher_iso
@@ -249,6 +252,92 @@ class DiagMergeGlueIsoExperiment_LastCkpt_Pairs_Base(object):
     ],
 )
 class DiagMergeGlueIsoExperiment_LastCkpt_Pairs_Large(object):
+    def create_run_instance_config(self, params):
+        return runs.RunInstanceConfig(
+            global_binding_specs=params.create_binding_specs()
+        )
+
+
+@experiment.experiment(
+    uuid="f312978db48c489c9777a58b2af0af5c",
+    group=BertMergingPrelimsGroup,
+    params_cls=DiagMergePairIsoParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_pairwise_merge_params,
+        train_exp=finetune_glue_iso.FinetuneGlueIsoExperiment_Large,
+        fisher_exp=glue_fisher_iso.GlueFisherIsoExperiment_BestCkpt_Large,
+    ),
+    fixed_params={
+        "num_weightings": 15,
+        "validation_examples": 4096,
+        "sequence_length": 64,
+        "batch_size": 2,
+    },
+    key_fields={
+        "models_to_merge",
+        "num_weightings",
+        "pretrained_model",
+        "fisher_type",
+        "fisher_params",
+        "validation_examples",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+    ],
+)
+class DiagMergeGlueIsoExperiment_BestCkpt_Pairs_Large(object):
+    def create_run_instance_config(self, params):
+        return runs.RunInstanceConfig(
+            global_binding_specs=params.create_binding_specs()
+        )
+
+
+@experiment.experiment(
+    uuid="518759a234884d888eff17d3ace62603",
+    group=BertMergingPrelimsGroup,
+    params_cls=DiagMergePairIsoParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_pairwise_merge_params,
+        train_exp=finetune_glue_iso.FinetuneGlueIsoExperiment_RobertaLarge,
+        fisher_exp=glue_fisher_iso.GlueFisherIsoExperiment_BestCkpt_RobertaLarge,
+    ),
+    fixed_params={
+        "num_weightings": 10,
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 256,
+    },
+    key_fields={
+        "models_to_merge",
+        "num_weightings",
+        "pretrained_model",
+        "fisher_type",
+        "fisher_params",
+        "validation_examples",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+    ],
+)
+class DiagMergeGlueIsoExperiment_BestCkpt_Pairs_RobertaLarge(object):
     def create_run_instance_config(self, params):
         return runs.RunInstanceConfig(
             global_binding_specs=params.create_binding_specs()

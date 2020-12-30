@@ -1,6 +1,8 @@
 """TODO: Add title."""
 import tensorflow as tf
 
+from del8.core.di import executable
+
 
 def convert_dataset_to_features(
     dataset,
@@ -9,7 +11,6 @@ def convert_dataset_to_features(
     masked_lm_prob=0.15,
     max_predictions_per_seq=None,
     text_key="text",
-    pad_token=0,
 ):
     """Creates an MLM task.
 
@@ -21,6 +22,7 @@ def convert_dataset_to_features(
         # This just means we'll never use a bound lower than that one.
         max_predictions_per_seq = sequence_length
 
+    pad_token = tokenizer.pad_token_id
     cls_token = tokenizer.cls_token_id
     sep_token = tokenizer.sep_token_id
     unmaskable_tokens = tf.constant([0, cls_token, sep_token])
@@ -176,3 +178,15 @@ def convert_dataset_to_features(
         process_tokenized_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE
     )
     return dataset
+
+
+###############################################################################
+
+
+@executable.executable()
+def mlm_preprocessor(dataset, tokenizer, sequence_length):
+    return convert_dataset_to_features(
+        dataset,
+        tokenizer,
+        sequence_length=sequence_length,
+    )

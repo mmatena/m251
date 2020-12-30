@@ -2,7 +2,32 @@
 import abc
 
 
-class MergeableModel(abc.ABC):
+class FisherableModel(abc.ABC):
+    """ABC for model we can compute Fisher of.
+
+    NOTE: A lot of times I conflate mergeability with Fisher-ability.
+    """
+
+    @abc.abstractmethod
+    def get_mergeable_body(self):
+        # Probably should return something like a keras layer.
+        raise NotImplementedError
+
+    def get_mergeable_variables(self):
+        return self.get_mergeable_body().trainable_variables
+
+    #############################################
+
+    @abc.abstractmethod
+    def compute_logits(self, x, training=None, mask=None):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def log_prob_of_y_samples(self, data, num_samples, training=None, mask=None):
+        raise NotImplementedError
+
+
+class MergeableModel(FisherableModel):
     # NOTE: Not all of these are required for mergeability per se, but
     # our code and experiments related to merging require them.
     #
@@ -37,21 +62,9 @@ class MergeableModel(abc.ABC):
     #############################################
 
     @abc.abstractmethod
-    def get_mergeable_body(self):
-        # Probably should return something like a keras layer.
+    def compute_task_logits(self, task_inputs, task, training=False):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_mergeable_variables(self):
-        # Should return list of tf.Variables.
-        raise NotImplementedError
-
-    #############################################
-
-    @abc.abstractmethod
-    def compute_logits(self, x, training=None, mask=None):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def log_prob_of_y_samples(self, data, num_samples, training=None, mask=None):
-        raise NotImplementedError
+    def get_num_classes_for_task(self, task):
+        pass
