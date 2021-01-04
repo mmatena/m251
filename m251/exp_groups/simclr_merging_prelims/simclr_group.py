@@ -20,9 +20,11 @@ from del8.storages.gcp import gcp
     extra_pip_packages=[
         # TODO: Figure our whether this or auto-injection?
         "absl-py",
-        "bert-for-tf2",
-        "google-auth",
-        "google-cloud-storage",
+        "bayesian-optimization==1.2.0",
+        "bert-for-tf2==0.14.6",
+        "google-auth==1.19.2",
+        "google-cloud-storage==1.30.0",
+        "google-resumable-media==0.7.0",
         "h5py",
         "numpy",
         "params-flow",

@@ -1,4 +1,6 @@
 """TODO: Add title."""
+import contextlib
+
 from absl import logging
 import tensorflow as tf
 
@@ -22,12 +24,16 @@ def diagonal_fisher_computer(
     _initializer,
     _builder,
     _loader,
-    finetuned_ckpt_uuid,
     num_examples,
+    finetuned_ckpt_uuid=None,
     fisher_class_chunk_size=4096,
     y_samples=None,
 ):
-    with scopes.binding_by_name_scope("checkpoint", finetuned_ckpt_uuid):
+    if finetuned_ckpt_uuid is None:
+        ctx = contextlib.suppress()
+    else:
+        ctx = scopes.binding_by_name_scope("checkpoint", finetuned_ckpt_uuid)
+    with ctx:
         ft_model = _initializer()
         with scopes.binding_by_name_scope("model", ft_model):
             ft_model = _builder(ft_model)
@@ -109,10 +115,13 @@ def diagonal_model_merger(
     with scopes.binding_by_name_scope("model", to_be_merged):
         to_be_merged = _builder(to_be_merged)
 
-        with tf.device("/cpu"):
-            merged_models = diagonal.merge_models_with_weightings(
-                to_be_merged, mergeable_models, weightings, min_fisher=min_fisher
-            )
+        merged_models = diagonal.merge_models_with_weightings(
+            to_be_merged,
+            mergeable_models,
+            weightings,
+            single_task=True,
+            min_fisher=min_fisher,
+        )
 
         for merged in merged_models:
             compile_kwargs = {}
@@ -122,3 +131,79 @@ def diagonal_model_merger(
             merged.compile(**compile_kwargs)
 
             yield merged
+
+
+###############################################################################
+
+
+@executable.executable(
+    default_bindings={
+        "initializer": gc_exe.bert_initializer,
+        "builder": gc_exe.bert_builder,
+    },
+)
+def diagonal_model_merge_weighting_search(
+    mergeable_models,
+    merge_weighting_search_steps,
+    merge_weighting_num_inits,
+    _initializer,
+    _builder,
+    _model_scorer,
+    min_fisher=1e-6,
+):
+    to_be_merged = _initializer()
+    with scopes.binding_by_name_scope("model", to_be_merged):
+        to_be_merged = _builder(to_be_merged)
+
+        (
+            merged_model,
+            weighting,
+            trial_weightings,
+            trial_scores,
+        ) = diagonal.merge_search_best_weighting(
+            to_be_merged,
+            mergeable_models=mergeable_models,
+            score_fn=_model_scorer,
+            max_evals=merge_weighting_search_steps,
+            num_inits=merge_weighting_num_inits,
+            min_fisher=min_fisher,
+        )
+
+    merged_model.compile()
+
+    return merged_model, weighting, trial_weightings, trial_scores
+
+
+###############################################################################
+
+
+@executable.executable()
+def diagonal_regularize_ewc_from_initial(
+    model,
+    fisher_matrix_uuid,
+    storage,
+    reg_strength=0.0,
+):
+    assert not model.is_roberta
+    if not reg_strength:
+        return model
+
+    logging.info(f"Retrieving saved fisher matrix: {fisher_matrix_uuid}")
+    with storage.retrieve_blob_as_tempfile(fisher_matrix_uuid) as f:
+        logging.info(f"Loading retrieved fisher matrix: {fisher_matrix_uuid}")
+        fisher_matrix = diagonal.DiagonalFisherMatrix.load(f.name)
+
+    diags = fisher_matrix.fisher_diagonals
+    og_weights = [tf.identity(w) for w in model.get_mergeable_variables()]
+
+    def regularizer(model_during_training):
+        trainable_weights = model_during_training.get_mergeable_variables()
+        from_pt_l2 = [
+            tf.reduce_sum(diag * tf.square(w - og_w))
+            for diag, og_w, w in zip(diags, og_weights, trainable_weights)
+        ]
+        return reg_strength * tf.reduce_sum(from_pt_l2)
+
+    model.add_regularizer(regularizer)
+
+    return model

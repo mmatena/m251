@@ -86,7 +86,7 @@ class BertMlm(tf.keras.Model, model_abcs.FisherableModel):
     ############################################
 
     def get_mergeable_body(self):
-        return self
+        return self.bert_layer
 
     #############################################
 

@@ -4,12 +4,17 @@ from del8.core.experiment import group
 
 from del8.core.utils import project_util
 from del8.storages.gcp import gcp
+from del8.storages.gcp import preloading
 
 
 @group.group(
     uuid="6eebd2c79d6248eb8c61fc7419c6dc45",
     # We use all of the default values for the gcp storage.
-    storage_params=gcp.GcpStorageParams(),
+    storage_params=gcp.GcpStorageParams(
+        preloading_params=preloading.GcpPreloadingParams(
+            clear_style=preloading.GcpPreloadingParams.DELETE_UNUSED
+        )
+    ),
     name="Merging of fine-tuned BERT models on GLUE preliminary experiments.",
     description="",
     project_params=[
@@ -20,9 +25,11 @@ from del8.storages.gcp import gcp
     extra_pip_packages=[
         # TODO: Figure our whether this or auto-injection?
         "absl-py",
-        "bert-for-tf2",
-        "google-auth",
-        "google-cloud-storage",
+        "bayesian-optimization==1.2.0",
+        "bert-for-tf2==0.14.6",
+        "google-auth==1.19.2",
+        "google-cloud-storage==1.30.0",
+        "google-resumable-media==0.7.0",
         "h5py",
         "numpy",
         "params-flow",

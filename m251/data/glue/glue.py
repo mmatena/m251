@@ -66,6 +66,10 @@ def _extract_labels(dataset):
     return tf.concat(labels, axis=0)
 
 
+def _data_to_batches_list(dataset):
+    return list(dataset)
+
+
 def _handle_mnli(tasks):
     new_tasks = []
     for task in tasks:
@@ -92,6 +96,7 @@ def glue_robust_evaluation_dataset(
     num_examples=None,
     split="validation",
     cache_validation_datasets=True,
+    cache_validation_batches_as_lists=False,
 ):
     datasets = {}
 
@@ -120,6 +125,8 @@ def glue_robust_evaluation_dataset(
             ds = _preprocesser(ds)
             ds = ds.batch(batch_size)
             labels = _extract_labels(ds)
+            if cache_validation_batches_as_lists:
+                ds = _data_to_batches_list(ds)
 
         datasets[task] = ds
         datasets[f"{task}_labels"] = labels
