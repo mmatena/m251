@@ -143,4 +143,6 @@ def variational_fisher_computation(
     if not save_fisher_at_each_epoch:
         fisher_matrix = compiled_fisher_computer.get_fisher_matrix()
         saved_fisher_matrix, item_uuid = _fisher_matrix_saver(fisher_matrix)
-    return saved_fisher_matrix, item_uuid
+        return saved_fisher_matrix, item_uuid
+    else:
+        return None, None

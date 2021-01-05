@@ -131,6 +131,9 @@ class DiagonalFisherMatrix(fisher_abcs.FisherMatrix):
     def save(self, file):
         hdf5_util.save_variables_to_hdf5(self.fisher_diagonals, file)
 
+    def get_diagonals(self):
+        return self.fisher_diagonals
+
 
 @tf.function
 def _merge_var(var, weighting, merge_vars, diags, min_fisher):
@@ -158,7 +161,7 @@ def merge_models(
                 model = mm.model
                 fisher_matrix = mm.fisher_matrix
 
-                diag = fisher_matrix.fisher_diagonals[i]
+                diag = fisher_matrix.get_diagonals()[i]
                 if not single_task or j == 0:
                     diag = tf.maximum(diag, min_fisher)
 
@@ -225,7 +228,7 @@ def _construct_fast_merge_assets(mergeable_models):
         model = m.model
         fisher_matrix = m.fisher_matrix
         for i, (v, d) in enumerate(
-            zip(model.get_mergeable_variables(), fisher_matrix.fisher_diagonals)
+            zip(model.get_mergeable_variables(), fisher_matrix.get_diagonals())
         ):
             merge_vars[i].append(v)
             merge_diags[i].append(d)

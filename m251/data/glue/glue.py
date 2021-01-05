@@ -7,6 +7,7 @@ from del8.core.di import scopes
 from del8.executables.data import preprocessing as preprocessing_execs
 from del8.executables.data import tfds as tfds_execs
 
+from m251.data.processing.constants import SUPER_GLUE_TASKS
 from m251.data.processing import glue as glue_processing
 from m251.data.processing import mixture
 from m251.models.bert import bert as bert_common
@@ -36,9 +37,11 @@ def glue_finetuning_dataset(
 ):
     datasets = []
     for task in tasks:
+        is_super_glue = task in SUPER_GLUE_TASKS
+        basename = "super_glue" if is_super_glue else "glue"
         task_bindings = [
             ("task", task),
-            ("dataset_name", f"glue/{task}"),
+            ("dataset_name", f"{basename}/{task}"),
         ]
         with scopes.binding_by_name_scopes(task_bindings):
             ds = _tfds_dataset()
@@ -99,9 +102,11 @@ def glue_robust_evaluation_dataset(
     cache_validation_batches_as_lists=False,
 ):
     datasets = {}
-
     for task in _handle_mnli(tasks):
-        dataset_name = f"glue/{task}"
+        is_super_glue = task in SUPER_GLUE_TASKS
+        basename = "super_glue" if is_super_glue else "glue"
+
+        dataset_name = f"{basename}/{task}"
 
         cache_key = (dataset_name, split, num_examples, batch_size)
         label_cache_key = cache_key + ("labels",)

@@ -1,4 +1,6 @@
 """TODO: Add title."""
+import collections
+
 import numpy as np
 import tensorflow as tf
 
@@ -22,6 +24,28 @@ def _to_hf_task_name(task):
     elif task == "mnli_mismatched":
         task = "mnli-mm"
     return task
+
+
+HackExample = collections.namedtuple("HackExample", ["text_a", "text_b", "label"])
+
+
+class BoolQProcessor(object):
+    def get_labels(self):
+        return [0, 1]
+
+    def get_example_from_tensor_dict(self, example):
+        return HackExample(
+            text_a=tf.compat.as_str(example["question"].numpy()),
+            text_b=tf.compat.as_str(example["passage"].numpy()),
+            label=example["label"].numpy(),
+        )
+
+    def tfds_map(self, example):
+        return example
+
+
+_glue_processors["boolq"] = BoolQProcessor
+_glue_output_modes["boolq"] = "classification"
 
 
 def convert_dataset_to_features(

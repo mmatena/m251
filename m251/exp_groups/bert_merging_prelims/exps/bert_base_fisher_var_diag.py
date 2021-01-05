@@ -236,8 +236,7 @@ class RteBestCkpt_Iso_0003_PhaseI(object):
         reg_types=["iso"],
         reg_strengths=[0.0003],
         #
-        dataset_sizes=[4096],
-        # dataset_sizes=[4096, 32768, 262144],
+        dataset_sizes=[4096, 32768, 262144],
         betas=[1e-6, 1e-7, 1e-8],
         learning_rates=[1e-2, 1e-3],
     ),

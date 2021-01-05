@@ -360,8 +360,17 @@ class VariationalDiagFisherMatrix(fisher_abcs.FisherMatrix):
         self.logvars = logvars
 
     @classmethod
-    def load(cls, file):
-        return cls(hdf5_util.load_variables_from_hdf5(file, trainable=False))
+    def load(cls, file, take_exp=False):
+        logvars = hdf5_util.load_variables_from_hdf5(file, trainable=False)
+        if take_exp:
+            for v in logvars:
+                v.assign(tf.exp(v))
+        return cls(logvars)
 
     def save(self, file):
         hdf5_util.save_variables_to_hdf5(self.logvars, file)
+
+    def get_diagonals(self):
+        # NOTE: This assumes that we have loaded this take_exp=True, i.e. these
+        # are the variances, NOT their logs.
+        return self.logvars

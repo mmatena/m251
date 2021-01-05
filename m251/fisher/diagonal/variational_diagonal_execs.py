@@ -10,6 +10,7 @@ from del8.executables.models import checkpoints as ckpt_exec
 
 from m251.models.bert import glue_classifier_execs as gc_exe
 
+from .diagonal_execs import MergableModel
 from . import variational_diagonal as vardiag
 
 
@@ -48,3 +49,39 @@ def variational_diag_fisher_computer(
             computer.compile(optimizer=optimizer)
 
     return computer
+
+
+###############################################################################
+
+
+@executable.executable(
+    default_bindings={
+        "initializer": gc_exe.bert_initializer,
+        "loader": ckpt_exec.checkpoint_loader,
+        "builder": gc_exe.bert_builder,
+    },
+)
+def diagonal_mergeable_model_from_checkpoint(
+    checkpoint,
+    checkpoint_to_fisher_matrix_uuid,
+    _initializer,
+    _builder,
+    _loader,
+    storage,
+):
+    with tf.device("/cpu"):
+        with scopes.binding_by_name_scope("checkpoint", checkpoint):
+            ft_model = _initializer()
+            with scopes.binding_by_name_scope("model", ft_model):
+                ft_model = _builder(ft_model)
+                ft_model = _loader(ft_model)
+
+        fisher_matrix_uuid = checkpoint_to_fisher_matrix_uuid[checkpoint]
+        logging.info(f"Retrieving saved fisher matrix: {fisher_matrix_uuid}")
+        with storage.retrieve_blob_as_tempfile(fisher_matrix_uuid) as f:
+            logging.info(f"Loading retrieved fisher matrix: {fisher_matrix_uuid}")
+            fisher_matrix = vardiag.VariationalDiagFisherMatrix.load(
+                f.name, take_exp=True
+            )
+
+        return MergableModel(model=ft_model, fisher_matrix=fisher_matrix)

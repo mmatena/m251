@@ -37,6 +37,8 @@ _TASK_TO_METRICS = {
     "qnli": [metrics.accuracy],
     "rte": [metrics.accuracy],
     "wnli": [metrics.accuracy],
+    #
+    "boolq": [metrics.accuracy],
 }
 
 

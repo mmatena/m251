@@ -19,6 +19,8 @@ NUM_GLUE_LABELS = {
     "qnli": 2,
     "rte": 2,
     "wnli": 2,
+    #
+    "boolq": 2,
 }
 
 NUM_GLUE_TRAIN_EXAMPLES = {
@@ -31,7 +33,12 @@ NUM_GLUE_TRAIN_EXAMPLES = {
     "qnli": 104_743,
     "rte": 2_490,
     "wnli": 635,
+    #
+    "boolq": 9_427,
 }
+
+
+SUPER_GLUE_TASKS = frozenset({"boolq"})
 
 
 # Taken from page 19 of https://arxiv.org/pdf/2005.00770.pdf. The
@@ -50,3 +57,6 @@ GLUE_POSITIVE_TRANSFER_TASKS = {
     "mnli": ("qnli", "rte", "mrpc"),
     "qnli": ("mnli",),
 }
+
+
+SQUAD2_NUM_EXAMPLES = 130_319

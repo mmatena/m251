@@ -33,6 +33,12 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
         ]
         self.regularizers = []
 
+    @property
+    def is_roberta(self):
+        # NOTE: My code was written with NLP in mind, so we
+        # check sometimes to see if something is RoBERTa.
+        return False
+
     #############################################
 
     def call(self, x, training=None, mask=None):
@@ -147,6 +153,21 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
         log_probs = tf.einsum("bc,sbc->sb", log_probs, tf.cast(samples, tf.float32))
 
         return log_probs
+
+    ############################################
+
+    @tf.function
+    def compute_task_logits(self, task_inputs, task, training=False):
+        images = task_inputs["image"]
+
+        out = self.base(images, training=training)
+
+        task_index = self.tasks.index(task)
+        task_head = self.heads[task_index]
+        return task_head(out, training=training)
+
+    def get_num_classes_for_task(self, task):
+        return IMAGE_CLASSIFICATION_NUM_LABELS[task]
 
 
 def get_initialized_simclr(model_name, tasks, fetch_dir=None):
