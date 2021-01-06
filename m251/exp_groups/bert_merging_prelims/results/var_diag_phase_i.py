@@ -24,11 +24,16 @@ from m251.fisher.execs import merging_execs
 
 from m251.exp_groups.bert_merging_prelims.exps import bert_base_fisher_var_diag
 from m251.exp_groups.bert_merging_prelims.exps import bert_base_var_diag_merge_phase_i
+from m251.exp_groups.bert_merging_prelims.exps import bert_base_var_diag_merge_phase_ii
 from m251.exp_groups.bert_merging_prelims.exps import finetune_bert_base
 
 
 BERT_BASE_VAR_DIAG_RTE_MNLI_0_0003_PHASE_I_JSON = os.path.expanduser(
     "~/Desktop/projects/m251/local_results/bert_base_var_diag_rte_mnli_0_0003_phase_i.json"
+)
+
+BERT_BASE_VAR_DIAG_RTE_MNLI_0_0003_PHASE_II_JSON = os.path.expanduser(
+    "~/Desktop/projects/m251/local_results/bert_base_var_diag_rte_mnli_0_0003_phase_ii.json"
 )
 
 
@@ -64,19 +69,21 @@ def _to_md_table(rows):
 
 
 @experiment.with_experiment_storages()
-def create_json(merge_exp, fisher_exps, eval_exp):
+def create_json(merge_exp, eval_exp, *fisher_exps):
     og_evals = eval_exp.retrieve_items_by_class(
         eval_execs.CheckpointEvaluationResults, run_uuid=None
     )
-    fisher_summaries = []
+    print("Retrieved evaluation results.")
     uuid_to_fisher_item = {}
     for fisher_exp in fisher_exps:
         uuid_to_fisher_item.update(fisher_exp.retrieve_all_items())
-        fisher_summaries.extend(
-            fisher_exp.retrieve_items_by_class(
-                fisher_execs.FisherMatricesSummary, run_uuid=None
-            )
-        )
+        print("Retrieved Fisher items.")
+
+    fisher_summaries = [
+        item
+        for item in uuid_to_fisher_item.values()
+        if isinstance(item, fisher_execs.FisherMatricesSummary)
+    ]
 
     uuid_to_saved_fisher_matrix = {
         k: v
@@ -99,7 +106,8 @@ def create_json(merge_exp, fisher_exps, eval_exp):
         raise ValueError(f"Fisher run params for run {run_id} not found.")
 
     items = []
-    for run_id in merge_exp.retrieve_run_uuids(RunState.FINISHED):
+    for i, run_id in enumerate(merge_exp.retrieve_run_uuids(RunState.FINISHED)):
+        print(f"Run {i}")
         params = merge_exp.retrieve_run_params(run_id)
 
         reses = merge_exp.retrieve_items_by_class(
@@ -197,13 +205,13 @@ def json_to_md_table(filepath, vertical=True, mc_score=None):
                     }
                     for item in items:
                         if item["hyperparams"]["donor"] == donor_hp:
-                            score = _get_single_score(item["merged_score"])
+                            # score = _get_single_score(item["merged_score"])
                             #
                             # score = _get_single_score(
                             #     item["merged_score"]
                             # ) - _get_single_score(item["original_score"])
                             #
-                            # score = _get_single_score(item["merged_score"]) - mc_score
+                            score = _get_single_score(item["merged_score"]) - mc_score
 
                             score = str(round(score, 1))
                             row.append(score)
@@ -216,9 +224,26 @@ def json_to_md_table(filepath, vertical=True, mc_score=None):
 
 
 if True:
-    filepath = BERT_BASE_VAR_DIAG_RTE_MNLI_0_0003_PHASE_I_JSON
+    filepath = BERT_BASE_VAR_DIAG_RTE_MNLI_0_0003_PHASE_II_JSON
     t = json_to_md_table(filepath, mc_score=70.8)
     print(t)
+
+    ###########################################################################
+
+    # merge_exp = bert_base_var_diag_merge_phase_ii.RteMnli_BestCkpt_Iso_0003_MergeSame_PhaseII
+    # fisher_exps = [
+    #     bert_base_fisher_var_diag.RteMnliBestCkpt_Iso_0003_PhaseII,
+    # ]
+    # eval_exp = finetune_bert_base.GlueEval_Regs
+    # summary = create_json(merge_exp, eval_exp, *fisher_exps)
+    # s = json.dumps(summary, indent=2)
+    # print(s)
+
+    ###########################################################################
+
+    # filepath = BERT_BASE_VAR_DIAG_RTE_MNLI_0_0003_PHASE_I_JSON
+    # t = json_to_md_table(filepath, mc_score=70.8)
+    # print(t)
 
     ###########################################################################
 
@@ -228,6 +253,6 @@ if True:
     #     bert_base_fisher_var_diag.MnliBestCkpt_Iso_0003_PhaseI,
     # ]
     # eval_exp = finetune_bert_base.GlueEval_Regs
-    # summary = create_json(merge_exp, fisher_exps, eval_exp)
+    # summary = create_json(merge_exp, eval_exp, *fisher_exps)
     # s = json.dumps(summary, indent=2)
     # print(s)

@@ -275,3 +275,58 @@ class MnliBestCkpt_Iso_0003_PhaseI(object):
 
     def create_preload_blob_uuids(self, params):
         return params.create_preload_blob_uuids()
+
+
+@experiment.experiment(
+    uuid="984dd7af9e11498589e4d1da1b5dc713",
+    group=BertMergingPrelimsGroup,
+    params_cls=VariationalFisherParams,
+    executable_cls=fisher_execs.variational_fisher_computation,
+    varying_params=functools.partial(
+        create_varying_params_from_best_eval,
+        ft_exp=finetune_bert_base.Glue_Regs,
+        eval_exp=finetune_bert_base.GlueEval_Regs,
+        #
+        tasks=["mnli", "rte"],
+        reg_types=["iso"],
+        reg_strengths=[0.0003],
+        #
+        dataset_sizes=[8192],
+        betas=[1e-9, 1e-10],
+        learning_rates=[1e-3, 1e-4, 1e-5],
+    ),
+    fixed_params={
+        "fisher_type": "variational_diagonal",
+        #
+        "batch_size": 8,
+        "sequence_length": 64,
+        #
+        "epochs": 2,
+        "examples_per_epoch": 4096,
+        #
+        "save_fisher_at_each_epoch": True,
+    },
+    key_fields={
+        "finetuned_run_uuid",
+        "finetuned_ckpt_uuid",
+        #
+        "fisher_type",
+        #
+        "variational_fisher_beta",
+        "learning_rate",
+        "num_examples",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        scopes.ArgNameBindingSpec("optimizer", optimizers.adam_optimizer),
+    ],
+)
+class RteMnliBestCkpt_Iso_0003_PhaseII(object):
+    def create_run_instance_config(self, params):
+        return runs.RunInstanceConfig(
+            global_binding_specs=params.create_binding_specs()
+        )
+
+    def create_preload_blob_uuids(self, params):
+        return params.create_preload_blob_uuids()
