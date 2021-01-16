@@ -9,11 +9,7 @@ from m251.models import model_execs
 from . import simclr_classifier
 
 
-@executable.executable(
-    pip_packages=[
-        "transformers==3.0.2",
-    ],
-)
+@executable.executable()
 def simclr_initializer(pretrained_model, tasks, fetch_dir=None):
     # NOTE: Unlike simclr, this will return a model that has been
     # initialized with the pretrained SimCLR weights.

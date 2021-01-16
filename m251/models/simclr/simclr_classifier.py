@@ -34,7 +34,7 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
         self.regularizers = []
 
     @property
-    def is_roberta(self):
+    def is_hf(self):
         # NOTE: My code was written with NLP in mind, so we
         # check sometimes to see if something is RoBERTa.
         return False
@@ -131,7 +131,8 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
     def get_mergeable_variables(self):
         # Should return list of tf.Variables.
-        return self.base.trainable_weights
+        # return self.base.trainable_weights
+        return self.base.trainable_variables
 
     #############################################
 

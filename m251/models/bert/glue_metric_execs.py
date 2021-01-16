@@ -39,6 +39,16 @@ _TASK_TO_METRICS = {
     "wnli": [metrics.accuracy],
     #
     "boolq": [metrics.accuracy],
+    #
+    "chemprot": [metrics.micro_f1],
+    "acl_arc": [metrics.macro_f1],
+    "sci_erc": [metrics.macro_f1],
+    "hyperpartisan": [metrics.macro_f1],
+    "helpfulness": [metrics.macro_f1],
+    #
+    "cifar100": [metrics.accuracy],
+    "dtd": [metrics.accuracy],
+    "oxford_iiit_pet": [metrics.accuracy],
 }
 
 

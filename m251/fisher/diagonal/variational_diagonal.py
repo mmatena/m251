@@ -69,7 +69,7 @@ def _extract_marked_pos_embeddings(x):
 class VariationalDiagFisherComputer(fisher_abcs.FisherComputer):
     def __init__(self, model, beta=1e-8, variance_scaling=0.05):
         super().__init__()
-        if getattr(model, "is_roberta", None):
+        if getattr(model, "is_hf", None):
             # We assume that we are dealing with a bert-tf2 model throughout this.
             raise ValueError("TODO: Variational diagonal merge with RoBERTa")
 

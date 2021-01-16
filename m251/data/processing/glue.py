@@ -141,9 +141,7 @@ def convert_dataset_to_features(
 ###############################################################################
 
 
-@executable.executable(
-    pip_packages=["transformers==3.0.2"],
-)
+@executable.executable()
 def glue_preprocessor(dataset, task, tokenizer, sequence_length):
     return convert_dataset_to_features(
         dataset,

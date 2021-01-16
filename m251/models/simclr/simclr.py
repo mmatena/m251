@@ -5,6 +5,7 @@ to it for the sake of brevity.
 
 NOTE: I am also only considering models without the selective kernels.
 """
+import re
 import os
 import shutil
 
@@ -78,6 +79,10 @@ def get_pretrained_simclr_checkpoint(model_name, fetch_dir=None):
 
 
 def get_pretrained_simclr(model_name, image_size=IMAGE_SIZE, fetch_dir=None):
+    # We need to do this to prevent the layer names from increasing upon sequential
+    # calls to this function.
+    tf.compat.v1.reset_default_graph()
+
     saved_model_path = get_pretrained_simclr_checkpoint(model_name, fetch_dir=fetch_dir)
     # We suppress logs at warning or lower as loading the model generates a lot of
     # useless warnining logs.
@@ -93,6 +98,7 @@ def get_pretrained_simclr(model_name, image_size=IMAGE_SIZE, fetch_dir=None):
     }
 
     depth, width_multiplier = _PRETRAINED_MODELS_TO_PARAMS[model_name]
+
     model = resnet.SimClrBaseModel(depth=depth, width_multiplier=width_multiplier)
 
     # Build the model.

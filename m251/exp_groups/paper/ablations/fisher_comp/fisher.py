@@ -67,17 +67,13 @@ class VariationalFisherParams(FisherParamsAbc):
         pass
 
     def get_train_steps(self):
-        num_examples = self.num_examples
-        if self.num_examples is None:
-            num_examples = NUM_GLUE_TRAIN_EXAMPLES[self.task]
-        examples_to_see = max(MIN_EXAMPLES_TO_SEE, num_examples)
+        examples_to_see = max(MIN_EXAMPLES_TO_SEE, self.num_examples)
         return examples_to_see // self.batch_size
 
     def create_bindings(self):
         return {
             "compiled_fisher_computer": vardiag_execs.variational_diag_fisher_computer,
-            "variational_fisher_beta": self.variational_fisher_beta,
-            "save_fisher_at_each_epoch": self.save_fisher_at_each_epoch,
+            "variational_fisher_beta": self.beta,
             "epochs": 1,
             "steps_per_epoch": self.get_train_steps(),
             **self.create_common_bindings(),
@@ -153,8 +149,8 @@ def create_varying_params(
 
 TASK_TO_EXAMPLE_COUNTS = {
     # None means all examples.
-    "rte": [256, 1024, None],
-    "mnli": [256, 1024, 4096, 32768, None],
+    "rte": [256, 1024, NUM_GLUE_TRAIN_EXAMPLES["rte"]],
+    "mnli": [256, 1024, 4096, 32768, NUM_GLUE_TRAIN_EXAMPLES["mnli"]],
 }
 
 MIN_EXAMPLES_TO_SEE = 8096
@@ -186,6 +182,8 @@ MIN_EXAMPLES_TO_SEE = 8096
         "num_examples",
     },
     bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "variational_diagonal"),
+        #
         scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
         scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
         scopes.ArgNameBindingSpec("optimizer", optimizers.adam_optimizer),
@@ -199,7 +197,7 @@ class VariationalFisherComputation(ExperimentAbc):
     uuid="d35cc31aa6f34dd4b7c2dce43fa58028",
     group=PaperExpGroup,
     params_cls=DirectFisherParams,
-    executable_cls=fisher_execs.variational_fisher_computation,
+    executable_cls=fisher_execs.fisher_computation,
     varying_params=functools.partial(
         create_varying_params,
         train_exp=GlueFinetune,
@@ -218,6 +216,9 @@ class VariationalFisherComputation(ExperimentAbc):
         "num_examples",
     },
     bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        scopes.ArgNameBindingSpec("y_samples", None),
+        #
         scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
         scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
     ],

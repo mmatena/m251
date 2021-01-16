@@ -24,7 +24,7 @@ class BertMlm(tf.keras.Model, model_abcs.FisherableModel):
         self.bert_layer = bert_layer
         self.bert_config = self.bert_layer.params
 
-        assert not self.is_roberta, "TODO: Support RoBERTa MLM models."
+        assert not self.is_hf, "TODO: Support RoBERTa MLM models."
 
         # We apply one more non-linear transformation before the output layer.
         # This matrix is not used after pre-training.
@@ -47,8 +47,8 @@ class BertMlm(tf.keras.Model, model_abcs.FisherableModel):
         )
 
     @property
-    def is_roberta(self):
-        return getattr(self.bert_layer, "is_roberta", False)
+    def is_hf(self):
+        return getattr(self.bert_layer, "is_hf", False)
 
     @property
     def hidden_size(self):
@@ -60,7 +60,7 @@ class BertMlm(tf.keras.Model, model_abcs.FisherableModel):
 
     @property
     def token_embeddings(self):
-        assert not self.is_roberta, "TODO: Support RoBERTa MLM models."
+        assert not self.is_hf, "TODO: Support RoBERTa MLM models."
         return self.bert_layer.embeddings_layer.word_embeddings_layer.embeddings
 
     def call(self, x, training=None, mask=None):
@@ -124,7 +124,7 @@ class BertMlm(tf.keras.Model, model_abcs.FisherableModel):
         }
 
     def create_metrics(self):
-        return {"tokens_to_predict": _mlm_average_nll}
+        return {"tokens_to_predict": mlm_average_nll}
 
 
 ###############################################################################
@@ -164,7 +164,7 @@ def load_pretrained_weights(model, pretrained_model, fetch_dir=None):
 ###############################################################################
 
 
-def _mlm_average_nll(y_true, y_pred):
+def mlm_average_nll(y_true, y_pred):
     # Negative log-liklihood average across predicted tokens. Lower values are better.
     logits = y_pred
     tokens_to_predict = y_true

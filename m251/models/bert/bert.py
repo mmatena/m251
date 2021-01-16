@@ -51,17 +51,19 @@ def _get_google_bert_model(model_name, fetch_dir=None):
         return fetched_dir
 
 
-def get_bert_layer(model_name, fetch_dir=None, name="bert"):
+def get_bert_layer(model_name, fetch_dir=None, name="bert", roberta_back_compat=True):
     if model_name in _ROBERTA_CHECKPOINTS:
         # NOTE: This will be pretrained unlike if we chose a bert model.
-        return roberta.get_pretrained_roberta(model_name)
+        return roberta.get_pretrained_roberta(
+            model_name, roberta_back_compat=roberta_back_compat
+        )
 
     model_dir = _get_google_bert_model(model_name, fetch_dir)
     bert_params = bert.params_from_pretrained_ckpt(model_dir)
     bert_params.mask_zero = True
     l_bert = bert.BertModelLayer.from_params(bert_params, name=name)
 
-    setattr(l_bert, "is_roberta", False)
+    setattr(l_bert, "is_hf", False)
 
     return l_bert
 
@@ -73,7 +75,7 @@ def get_pretrained_checkpoint(model_name, fetch_dir=None):
 
 
 def load_pretrained_weights(bert_layer, model_name, fetch_dir=None):
-    if getattr(bert_layer, "is_roberta", False):
+    if getattr(bert_layer, "is_hf", False):
         # The RoBERTa layer will already have the pretrained weights loaded.
         return bert_layer
     ckpt = get_pretrained_checkpoint(model_name, fetch_dir=fetch_dir)

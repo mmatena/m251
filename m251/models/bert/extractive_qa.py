@@ -27,8 +27,8 @@ class BertExtractiveQa(tf.keras.Model, model_abcs.MergeableModel):
         self.regularizers = []
 
     @property
-    def is_roberta(self):
-        return getattr(self.bert_layer, "is_roberta", False)
+    def is_hf(self):
+        return getattr(self.bert_layer, "is_hf", False)
 
     def call(self, x, training=None, mask=None):
         inputs = x["input_ids"]

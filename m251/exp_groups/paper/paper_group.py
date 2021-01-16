@@ -34,6 +34,7 @@ from del8.storages.gcp import preloading
         "google-resumable-media==0.7.0",
         "h5py",
         "numpy",
+        "overload==1.1",
         "params-flow",
         "pinject",
         "psycopg2-binary",
@@ -43,6 +44,7 @@ from del8.storages.gcp import preloading
         "sshtunnel",
         "tensorflow-datasets==4.1.0",
         "tensorflow-probability==0.11.1",
+        "torch==1.6.0",
         "transformers==3.0.2",
     ],
 )
@@ -81,3 +83,27 @@ class ParamsAbc(abc.ABC):
 
     def create_preload_blob_uuids(self):
         return None
+
+
+###############################################################################
+
+
+def create_pairwise_weightings(num_weightings):
+    num_weightings -= 2
+    denom = num_weightings + 1
+    weightings = [((i + 1) / denom, 1 - (i + 1) / denom) for i in range(num_weightings)]
+    weightings = [(0.0, 1.0)] + weightings + [(1.0, 0.0)]
+    return weightings
+
+
+@data_class.data_class()
+class ModelToMerge(object):
+    def __init__(
+        self,
+        task,
+        train_run_uuid,
+        fisher_run_uuid,
+        model_checkpoint_uuid,
+        fisher_matrix_uuid,
+    ):
+        pass

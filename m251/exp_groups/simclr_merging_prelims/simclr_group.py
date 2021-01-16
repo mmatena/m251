@@ -18,7 +18,6 @@ from del8.storages.gcp import gcp
         project_util.ProjectParams(folder_path="~/Desktop/projects/m251"),
     ],
     extra_pip_packages=[
-        # TODO: Figure our whether this or auto-injection?
         "absl-py",
         "bayesian-optimization==1.2.0",
         "bert-for-tf2==0.14.6",
@@ -27,6 +26,7 @@ from del8.storages.gcp import gcp
         "google-resumable-media==0.7.0",
         "h5py",
         "numpy",
+        "overload==1.1",
         "params-flow",
         "pinject",
         "psycopg2-binary",
@@ -36,6 +36,7 @@ from del8.storages.gcp import gcp
         "sshtunnel",
         "tensorflow-datasets==4.1.0",
         "tensorflow-probability==0.11.1",
+        "torch==1.6.0",
         "transformers==3.0.2",
     ],
 )

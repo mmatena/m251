@@ -92,7 +92,7 @@ def simclr_finetuning_dataset(
         ]
         with scopes.binding_by_name_scopes(task_bindings):
             tfds_split = split
-            if split != "train":
+            if split == "validation":
                 tfds_split = IMAGE_CLASSIFICATION_VAL_SPLIT_NAME[task]
             with scopes.binding_by_name_scope("split", tfds_split):
                 ds = _tfds_dataset()
@@ -104,3 +104,78 @@ def simclr_finetuning_dataset(
     mixture = _batcher(mixture)
 
     return mixture
+
+
+###############################################################################
+
+
+# (dataset_name, split, num_examples, batch_size) -> dataset
+# (dataset_name, split, num_examples, batch_size, 'labels') -> labels
+_ROBUST_VALIDATION_DATASET_CACHE = {}
+
+
+def _extract_labels(dataset):
+    labels = []
+    for _, minibatch_labels in dataset:
+        labels.append(minibatch_labels)
+    return tf.concat(labels, axis=0)
+
+
+def _data_to_batches_list(dataset):
+    return list(dataset)
+
+
+@executable.executable(
+    default_bindings={
+        "tfds_dataset": tfds_execs.tfds_dataset,
+        "preprocesser": image_classification_preprocessor,
+    }
+)
+def robust_evaluation_dataset(
+    tasks,
+    _tfds_dataset,
+    _preprocesser,
+    batch_size,
+    num_examples=None,
+    split="validation",
+    cache_validation_datasets=True,
+    cache_validation_batches_as_lists=False,
+):
+    datasets = {}
+    for task in tasks:
+        if split == "validation":
+            split = IMAGE_CLASSIFICATION_VAL_SPLIT_NAME[task]
+
+        cache_key = (task, split, num_examples, batch_size)
+        label_cache_key = cache_key + ("labels",)
+        if cache_validation_datasets and cache_key in _ROBUST_VALIDATION_DATASET_CACHE:
+            datasets[task] = _ROBUST_VALIDATION_DATASET_CACHE[cache_key]
+            datasets[f"{task}_labels"] = _ROBUST_VALIDATION_DATASET_CACHE[
+                label_cache_key
+            ]
+            continue
+
+        task_bindings = [
+            ("task", task),
+            ("dataset_name", task),
+            ("split", split),
+        ]
+        with scopes.binding_by_name_scopes(task_bindings):
+            ds = _tfds_dataset()
+            if num_examples is not None:
+                ds = ds.take(num_examples)
+            ds = ds.cache()
+            ds = _preprocesser(ds)
+            ds = ds.batch(batch_size)
+            labels = _extract_labels(ds)
+            if cache_validation_batches_as_lists:
+                ds = _data_to_batches_list(ds)
+
+        datasets[task] = ds
+        datasets[f"{task}_labels"] = labels
+
+        if cache_validation_datasets:
+            _ROBUST_VALIDATION_DATASET_CACHE[cache_key] = ds
+            _ROBUST_VALIDATION_DATASET_CACHE[label_cache_key] = labels
+
+    return datasets

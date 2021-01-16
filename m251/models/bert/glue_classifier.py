@@ -17,15 +17,20 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         self.num_tasks = len(tasks)
         self.num_classes = [NUM_GLUE_LABELS[t] for t in tasks]
 
-        self.heads = [
-            tf.keras.layers.Dense(
-                units,
-                activation=None,
-                # kernel_regularizer=tf.keras.regularizers.l2(lmbda_head),
-                name=f"classifier_head_{i}",
-            )
-            for i, units in enumerate(self.num_classes)
-        ]
+        if self.is_hf and hasattr(bert_layer, "head") and len(tasks) == 1:
+            # In this case, we are loading a pretrained classifier with its
+            # pretrained head.
+            self.heads = [bert_layer.head]
+        else:
+            self.heads = [
+                tf.keras.layers.Dense(
+                    units,
+                    activation=None,
+                    # kernel_regularizer=tf.keras.regularizers.l2(lmbda_head),
+                    name=f"classifier_head_{i}",
+                )
+                for i, units in enumerate(self.num_classes)
+            ]
 
         # TODO: There is probably a better way to get this custom loss working.
         self.custom_loss = _make_multitask_loss(
@@ -36,8 +41,21 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         self.regularizers = []
 
     @property
-    def is_roberta(self):
-        return getattr(self.bert_layer, "is_roberta", False)
+    def is_hf(self):
+        return getattr(self.bert_layer, "is_hf", False)
+
+    @property
+    def head_input_has_sequence_dim(self):
+        return getattr(self.bert_layer, "head_input_has_sequence_dim", False)
+
+    def _get_cls_representation_from_body_output(self, out):
+        if self.head_input_has_sequence_dim:
+            # NOTE: We now assume that we use the representation of the CLS token for classification.
+            # Beaware that some models might pool all of the hidden states instead, but I do not
+            # believe any of the models at the time of this writing are like that.
+            return out[..., :1, :]
+        else:
+            return out[..., 0, :]
 
     def call(self, x, training=None, mask=None):
         inputs = [x[f"task_{i}_input_ids"] for i in range(self.num_tasks)]
@@ -51,7 +69,7 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         )
 
         # Get the CLS token representation.
-        all_out = all_out[..., 0, :]
+        all_out = self._get_cls_representation_from_body_output(all_out)
 
         outs = tf.split(all_out, num_or_size_splits=num_task_examples, axis=0)
 
@@ -95,7 +113,7 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         out = self.bert_layer([input_ids, token_type_ids], training=training)
 
         # Get the CLS token representation.
-        out = out[..., 0, :]
+        out = self._get_cls_representation_from_body_output(out)
 
         task_index = self.tasks.index(task)
         task_head = self.heads[task_index]
@@ -143,10 +161,17 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         self.assert_single_task()
         return self.heads[0]
 
+    def _get_dummy_head_input(self):
+        if self.head_input_has_sequence_dim:
+            return tf.keras.Input([1, self.bert_layer.params.hidden_size])
+        else:
+            return tf.keras.Input([self.bert_layer.params.hidden_size])
+
     def set_classifier_heads(self, heads):
         assert len(heads) == len(self.heads)
+        dummy_head_input = self._get_dummy_head_input()
         for old, new in zip(self.heads, heads):
-            new(tf.keras.Input([self.bert_layer.params.hidden_size]))
+            new(dummy_head_input)
             old.set_weights(new.get_weights())
 
     def add_regularizer(self, regularizer):

@@ -13,6 +13,17 @@ from m251.data.processing import mixture
 from m251.models.bert import bert as bert_common
 
 
+@executable.executable()
+def glue_dataset_name(task):
+    is_super_glue = task in SUPER_GLUE_TASKS
+    basename = "super_glue" if is_super_glue else "glue"
+
+    return f"{basename}/{task}"
+
+
+###############################################################################
+
+
 @executable.executable(
     default_bindings={
         "tfds_dataset": tfds_execs.tfds_dataset,
@@ -21,6 +32,7 @@ from m251.models.bert import bert as bert_common
         "mixer": mixture.no_shuffle_mixer,
         "batcher": preprocessing_execs.batcher,
         "tokenizer": bert_common.bert_tokenizer,
+        "dataset_name": glue_dataset_name,
     }
 )
 def glue_finetuning_dataset(
@@ -29,6 +41,7 @@ def glue_finetuning_dataset(
     # methods with a default implementation if the logic probably isn't
     # reusable. I don't think I support overidding an entire public method
     # yet, but it's something I plan to support.
+    _dataset_name,
     _tfds_dataset,
     _preprocesser,
     _common_prebatch_processer,
@@ -37,11 +50,9 @@ def glue_finetuning_dataset(
 ):
     datasets = []
     for task in tasks:
-        is_super_glue = task in SUPER_GLUE_TASKS
-        basename = "super_glue" if is_super_glue else "glue"
         task_bindings = [
             ("task", task),
-            ("dataset_name", f"{basename}/{task}"),
+            ("dataset_name", _dataset_name(task)),
         ]
         with scopes.binding_by_name_scopes(task_bindings):
             ds = _tfds_dataset()
@@ -89,12 +100,14 @@ def _handle_mnli(tasks):
         "tfds_dataset": tfds_execs.tfds_dataset,
         "preprocesser": glue_processing.glue_preprocessor,
         "tokenizer": bert_common.bert_tokenizer,
+        "dataset_name": glue_dataset_name,
     }
 )
 def glue_robust_evaluation_dataset(
     tasks,
     _tfds_dataset,
     _preprocesser,
+    _dataset_name,
     batch_size,
     num_examples=None,
     split="validation",
@@ -103,10 +116,7 @@ def glue_robust_evaluation_dataset(
 ):
     datasets = {}
     for task in _handle_mnli(tasks):
-        is_super_glue = task in SUPER_GLUE_TASKS
-        basename = "super_glue" if is_super_glue else "glue"
-
-        dataset_name = f"{basename}/{task}"
+        dataset_name = _dataset_name(task)
 
         cache_key = (dataset_name, split, num_examples, batch_size)
         label_cache_key = cache_key + ("labels",)

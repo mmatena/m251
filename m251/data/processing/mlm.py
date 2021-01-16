@@ -25,7 +25,7 @@ def convert_dataset_to_features(
     pad_token = tokenizer.pad_token_id
     cls_token = tokenizer.cls_token_id
     sep_token = tokenizer.sep_token_id
-    unmaskable_tokens = tf.constant([0, cls_token, sep_token])
+    unmaskable_tokens = tf.constant([pad_token, cls_token, sep_token])
     mask_token = tokenizer.mask_token_id
     vocab_size = tokenizer.vocab_size
 

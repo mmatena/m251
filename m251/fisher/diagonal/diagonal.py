@@ -145,13 +145,22 @@ def _merge_var(var, weighting, merge_vars, diags, min_fisher):
 
 
 def merge_models(
-    merged_model, mergeable_models, weighting=None, single_task=True, min_fisher=1e-6
+    merged_model,
+    mergeable_models,
+    weighting=None,
+    single_task=True,
+    min_fisher=1e-6,
+    normalization_constants=None,
 ):
     # If single_task=True, then we only care about the score of the first model.
     if not weighting:
         weighting = len(mergeable_models) * [1.0]
 
     assert len(mergeable_models) == len(weighting)
+
+    if normalization_constants:
+        assert len(normalization_constants) == len(weighting)
+        weighting = [w / n for w, n in zip(weighting, normalization_constants)]
 
     with tf.device("gpu"):
         for i, var in enumerate(merged_model.get_mergeable_variables()):
@@ -172,6 +181,22 @@ def merge_models(
             lhs = tf.reduce_sum(lhs, axis=0)
             var.assign(rhs / lhs)
 
+        # untrainable_dst_vars = [v for v in merged_model.get_mergeable_body().variables if not v.trainable]
+        # untrainable_src_vars = [
+        #     [v for v in m.model.get_mergeable_body().variables if not v.trainable]
+        #     for m in mergeable_models
+        # ]
+
+        # for i, var in enumerate(untrainable_dst_vars):
+        #     lhs = []
+        #     rhs = []
+        #     for weight, src_vars in zip(weighting, untrainable_src_vars):
+        #         lhs.append(weight)
+        #         rhs.append(weight * src_vars[i])
+        #     rhs = tf.reduce_sum(rhs, axis=0)
+        #     lhs = tf.reduce_sum(lhs, axis=0)
+        #     var.assign(rhs / lhs)
+
     if single_task:
         heads = [mergeable_models[0].model.get_classifier_head()]
     else:
@@ -181,9 +206,26 @@ def merge_models(
     return merged_model
 
 
+def _get_norm_const(fisher_matrix):
+    norm_const = tf.reduce_sum(
+        [tf.reduce_sum(tf.square(d)) for d in fisher_matrix.get_diagonals()]
+    )
+    return tf.sqrt(norm_const)
+
+
 def merge_models_with_weightings(
-    merged_model, mergeable_models, weightings, single_task=True, min_fisher=1e-6
+    merged_model,
+    mergeable_models,
+    weightings,
+    single_task=True,
+    min_fisher=1e-6,
+    normalize_fishers=False,
 ):
+    if normalize_fishers:
+        norm_consts = [_get_norm_const(mtm.fisher_matrix) for mtm in mergeable_models]
+    else:
+        norm_consts = None
+
     for weighting in weightings:
         merged = merge_models(
             merged_model,
@@ -191,6 +233,7 @@ def merge_models_with_weightings(
             weighting=weighting,
             single_task=single_task,
             min_fisher=min_fisher,
+            normalization_constants=norm_consts,
         )
         yield merged
 
@@ -198,11 +241,8 @@ def merge_models_with_weightings(
 ###############################################################################
 
 
-@tf.function
-def _merge_body_fast_single_task(
-    variables, weighting, merge_diags, merge_vars, min_fishers
-):
-    logging.info("Tracing _merge_body_fast_single_task")
+def _merge_body_fast(variables, weighting, merge_diags, merge_vars, min_fishers):
+    # logging.info("Tracing _merge_body_fast")
 
     weighting = tf.unstack(weighting)
     min_fishers = tf.unstack(min_fishers)
@@ -216,6 +256,9 @@ def _merge_body_fast_single_task(
         rhs = tf.reduce_sum(rhs, axis=0)
         lhs = tf.reduce_sum(lhs, axis=0)
         var.assign(rhs / lhs)
+
+
+_merge_body_fast_tf_func = tf.function(_merge_body_fast)
 
 
 def _construct_fast_merge_assets(mergeable_models):
@@ -233,203 +276,6 @@ def _construct_fast_merge_assets(mergeable_models):
             merge_vars[i].append(v)
             merge_diags[i].append(d)
     return merge_vars, merge_diags
-
-
-# def _get_weighting(point, num_weights):
-#     return [point[f'weight_{i}'] for i in range(num_weights)]
-
-
-# def merge_search_best_weighting(
-#     to_be_merged,
-#     mergeable_models,
-#     score_fn,
-#     max_evals,
-#     num_inits,
-#     # algo=hyperopt.tpe.suggest,
-#     min_fisher=1e-6
-# ):
-#     num_models = len(mergeable_models)
-#     # NOTE: The first model in mergeable_models will be the one whose score
-#     # we are attempting to maximize.
-#     pbounds = {
-#         f'weight_{i}': (0.0, 1.0) for i in range(num_models)
-#     }
-
-#     # Set up for merging.
-#     to_be_merged.set_classifier_heads([mergeable_models[0].model.get_classifier_head()])
-#     variables = to_be_merged.get_mergeable_variables()
-#     merge_vars, merge_diags = _construct_fast_merge_assets(mergeable_models)
-
-#     min_fishers = tf.constant([min_fisher] + (num_models - 1) * [0.0], dtype=tf.float32)
-
-#     weightings = []
-#     scores = []
-
-#     time_marker = time.time()
-
-#     def fn(**point):
-#         nonlocal time_marker
-#         new_time_marker = time.time()
-#         elapsed_seconds = new_time_marker - time_marker
-#         elapsed_nice = str(datetime.timedelta(seconds=elapsed_seconds))
-#         logging.info(f"Hyperopt step took {elapsed_nice}.")
-#         time_marker = new_time_marker
-
-#         weighting = _get_weighting(point, num_weights=num_models)
-#         weightings.append(weighting)
-
-#         start_time = time.time()
-
-#         weighting = tf.constant(weighting, dtype=tf.float32)
-#         _merge_body_fast_single_task(variables, weighting, merge_diags, merge_vars, min_fishers)
-
-#         elapsed_seconds = time.time() - start_time
-#         elapsed_nice = str(datetime.timedelta(seconds=elapsed_seconds))
-#         logging.info(f"Merging took {elapsed_nice}.")
-
-#         ret = score_fn(to_be_merged)
-#         scores.append(ret)
-
-#         elapsed_seconds = time.time() - new_time_marker
-#         elapsed_nice = str(datetime.timedelta(seconds=elapsed_seconds))
-#         logging.info(f"Hyperopt fn call took {elapsed_nice}.")
-
-#         return ret
-
-#     # bounds_transformer = bayes.SequentialDomainReductionTransformer()
-#     optimizer = bayes.BayesianOptimization(
-#         f=fn,
-#         pbounds=pbounds,
-#         # verbose=0,
-#         random_state=1,
-#         # bounds_transformer=bounds_transformer
-#     )
-#     # Probe the unmerged model.
-#     optimizer.probe(
-#         params={
-#             f'weight_{i}': float(not i) for i in range(num_models)
-#         },
-#         lazy=True,
-#     )
-#     optimizer.maximize(
-#         init_points=num_inits,
-#         n_iter=max_evals,
-#     )
-
-#     best_weighting = _get_weighting(optimizer.max['params'], num_weights=num_models)
-
-#     merged_model = merge_models(
-#         to_be_merged, mergeable_models, weighting=best_weighting, min_fisher=min_fisher, single_task=True
-#     )
-
-#     return merged_model, best_weighting, weightings, scores
-
-
-#################################################################################################
-
-
-# def _get_weighting(point, num_weights):
-#     weights = [point[f'weight_{i}'] for i in range(num_weights - 1)]
-#     last = 1.0 - sum(weights)
-#     assert last >= 0.0
-#     weights.append(last)
-#     return weights
-
-
-# def _is_in_simplex(point):
-#     return sum(point.values()) <= 1.0
-
-
-# def merge_search_best_weighting(
-#     to_be_merged,
-#     mergeable_models,
-#     score_fn,
-#     max_evals,
-#     num_inits,
-#     # algo=hyperopt.tpe.suggest,
-#     min_fisher=1e-6
-# ):
-#     num_models = len(mergeable_models)
-#     # NOTE: The first model in mergeable_models will be the one whose score
-#     # we are attempting to maximize.
-#     pbounds = {
-#         f'weight_{i}': (0.0, 1.0) for i in range(num_models - 1)
-#     }
-
-#     # Set up for merging.
-#     to_be_merged.set_classifier_heads([mergeable_models[0].model.get_classifier_head()])
-#     variables = to_be_merged.get_mergeable_variables()
-#     merge_vars, merge_diags = _construct_fast_merge_assets(mergeable_models)
-
-#     min_fishers = tf.constant([min_fisher] + (num_models - 1) * [0.0], dtype=tf.float32)
-
-#     weightings = []
-#     scores = []
-
-#     time_marker = time.time()
-
-#     def fn(**point):
-#         nonlocal time_marker
-#         new_time_marker = time.time()
-#         elapsed_seconds = new_time_marker - time_marker
-#         elapsed_nice = str(datetime.timedelta(seconds=elapsed_seconds))
-#         logging.info(f"Hyperopt step took {elapsed_nice}.")
-#         time_marker = new_time_marker
-
-#         if not _is_in_simplex(point):
-#             return -100.0
-
-#         weighting = _get_weighting(point, num_weights=num_models)
-#         weightings.append(weighting)
-
-#         start_time = time.time()
-
-#         weighting = tf.constant(weighting, dtype=tf.float32)
-#         _merge_body_fast_single_task(variables, weighting, merge_diags, merge_vars, min_fishers)
-
-#         elapsed_seconds = time.time() - start_time
-#         elapsed_nice = str(datetime.timedelta(seconds=elapsed_seconds))
-#         logging.info(f"Merging took {elapsed_nice}.")
-
-#         ret = score_fn(to_be_merged)
-#         scores.append(ret)
-
-#         elapsed_seconds = time.time() - new_time_marker
-#         elapsed_nice = str(datetime.timedelta(seconds=elapsed_seconds))
-#         logging.info(f"Hyperopt fn call took {elapsed_nice}.")
-
-#         return ret
-
-#     # bounds_transformer = bayes.SequentialDomainReductionTransformer()
-#     optimizer = bayes.BayesianOptimization(
-#         f=fn,
-#         pbounds=pbounds,
-#         # verbose=0,
-#         random_state=1,
-#         # bounds_transformer=bounds_transformer
-#     )
-#     # Probe the unmerged model.
-#     optimizer.probe(
-#         params={
-#             f'weight_{i}': float(not i) for i in range(num_models - 1)
-#         },
-#         lazy=True,
-#     )
-#     optimizer.maximize(
-#         init_points=num_inits,
-#         n_iter=max_evals,
-#     )
-
-#     best_weighting = _get_weighting(optimizer.max['params'], num_weights=num_models)
-
-#     merged_model = merge_models(
-#         to_be_merged, mergeable_models, weighting=best_weighting, min_fisher=min_fisher, single_task=True
-#     )
-
-#     return merged_model, best_weighting, weightings, scores
-
-
-#################################################################################################
 
 
 def _get_weighting(point, num_weights, min_target_weight):
@@ -450,9 +296,10 @@ def merge_search_best_weighting(
     score_fn,
     max_evals,
     num_inits,
-    # algo=hyperopt.tpe.suggest,
     min_fisher=1e-6,
-    min_target_weight=0.25,
+    min_target_weight=0.01,
+    single_task=True,
+    merge_on_cpu=False,
 ):
     num_models = len(mergeable_models)
     # NOTE: The first model in mergeable_models will be the one whose score
@@ -460,11 +307,30 @@ def merge_search_best_weighting(
     pbounds = {f"weight_{i}": (0.0, 1.0) for i in range(1, num_models)}
 
     # Set up for merging.
-    to_be_merged.set_classifier_heads([mergeable_models[0].model.get_classifier_head()])
+    if single_task:
+        to_be_merged.set_classifier_heads(
+            [mergeable_models[0].model.get_classifier_head()]
+        )
+    else:
+        to_be_merged.set_classifier_heads(
+            [mtm.model.get_classifier_head() for mtm in mergeable_models]
+        )
     variables = to_be_merged.get_mergeable_variables()
     merge_vars, merge_diags = _construct_fast_merge_assets(mergeable_models)
 
-    min_fishers = tf.constant([min_fisher] + (num_models - 1) * [0.0], dtype=tf.float32)
+    if single_task:
+        min_fishers = tf.constant(
+            [min_fisher] + (num_models - 1) * [0.0], dtype=tf.float32
+        )
+    else:
+        min_fishers = tf.constant(num_models * [min_fisher], dtype=tf.float32)
+
+    if merge_on_cpu:
+        device = "cpu"
+        merge_fn = _merge_body_fast
+    else:
+        device = "gpu"
+        merge_fn = _merge_body_fast_tf_func
 
     weightings = []
     scores = []
@@ -487,15 +353,16 @@ def merge_search_best_weighting(
         start_time = time.time()
 
         weighting = tf.constant(weighting, dtype=tf.float32)
-        _merge_body_fast_single_task(
-            variables, weighting, merge_diags, merge_vars, min_fishers
-        )
+        with tf.device(device):
+            merge_fn(variables, weighting, merge_diags, merge_vars, min_fishers)
 
         elapsed_seconds = time.time() - start_time
         elapsed_nice = str(datetime.timedelta(seconds=elapsed_seconds))
         logging.info(f"Merging took {elapsed_nice}.")
 
         ret = score_fn(to_be_merged)
+        logging.info(f"Score: {ret}")
+
         scores.append(ret)
 
         elapsed_seconds = time.time() - new_time_marker

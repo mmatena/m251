@@ -1,4 +1,6 @@
 """TODO: Add title."""
+from m251.data.domains import target_tasks
+
 
 # Despite what the paper says, STS-B starts at 0, not 1.
 STSB_MIN = 0
@@ -21,6 +23,8 @@ NUM_GLUE_LABELS = {
     "wnli": 2,
     #
     "boolq": 2,
+    #
+    **target_tasks.NUM_CLASSES,
 }
 
 NUM_GLUE_TRAIN_EXAMPLES = {
@@ -35,6 +39,8 @@ NUM_GLUE_TRAIN_EXAMPLES = {
     "wnli": 635,
     #
     "boolq": 9_427,
+    #
+    **target_tasks.TRAIN_EXAMPLES,
 }
 
 

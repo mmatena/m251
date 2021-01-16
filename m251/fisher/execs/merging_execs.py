@@ -59,6 +59,7 @@ def merge_and_evaluate_from_checkpoints(
     _mergeable_model,
     _model_merger,
     _evaluate_model,
+    multitask_merge=False,
 ):
     assert len(checkpoints) == len(tasks)
 
@@ -73,10 +74,10 @@ def merge_and_evaluate_from_checkpoints(
             mergeable_model = _mergeable_model()
             mergeable_models.append(mergeable_model)
 
-    # NOTE: Right now this is assume we only care about the performance of
+    # NOTE: Single task merge means we only care about the performance of
     # the first task.
     bindings = [
-        ("tasks", tasks[:1]),
+        ("tasks", tasks if multitask_merge else tasks[:1]),
         ("task", tasks[0]),
     ]
     with scopes.binding_by_name_scopes(bindings):
@@ -120,6 +121,18 @@ def single_score_from_results(results, task):
     return sum(scores) / len(scores)
 
 
+def _average_score(scores):
+    if not isinstance(scores, dict):
+        return scores
+    values = [_average_score(v) for v in scores.values()]
+    return sum(values) / len(values)
+
+
+@executable.executable()
+def average_score_from_results(results):
+    return _average_score(results)
+
+
 @executable.executable(
     default_bindings={
         "evaluate_model": eval_execs.robust_evaluate_model,
@@ -149,7 +162,7 @@ def merge_weighting_search_scorer(
     },
 )
 def merge_weighting_search_from_checkpoints(
-    task,
+    tasks,
     #
     checkpoints,
     checkpoint_tasks,
@@ -176,8 +189,7 @@ def merge_weighting_search_from_checkpoints(
 
     bindings = [
         ("num_examples", search_num_examples),
-        ("task", task),
-        ("tasks", [task]),
+        ("tasks", tasks),
     ]
     with scopes.binding_by_name_scopes(bindings):
         (
@@ -192,8 +204,7 @@ def merge_weighting_search_from_checkpoints(
         ("trial_weightings", trial_weightings),
         ("trial_scores", trial_scores),
         ("num_examples", final_evaluate_num_examples),
-        ("task", task),
-        ("tasks", [task]),
+        ("tasks", tasks),
     ]
     with scopes.binding_by_name_scopes(bindings):
         _evaluate_model(merged_model)

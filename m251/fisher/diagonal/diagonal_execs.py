@@ -1,5 +1,6 @@
 """TODO: Add title."""
 import contextlib
+import re
 
 from absl import logging
 import tensorflow as tf
@@ -93,6 +94,52 @@ def diagonal_mergeable_model_from_checkpoint(
         return MergableModel(model=ft_model, fisher_matrix=fisher_matrix)
 
 
+# TODO: Move this to common place.
+def _is_uuid(s):
+    return re.match(r"^[0-9a-f]{32}$", s)
+
+
+@executable.executable(
+    default_bindings={
+        "initializer": gc_exe.bert_initializer,
+        "loader": gc_exe.bert_loader,
+        "builder": gc_exe.bert_builder,
+    },
+)
+def diagonal_mergeable_model_from_checkpoint_or_pretrained(
+    checkpoint,
+    checkpoint_to_fisher_matrix_uuid,
+    pretrained_model,
+    _initializer,
+    _builder,
+    _loader,
+    storage,
+):
+    with tf.device("/cpu"):
+        if checkpoint is None or _is_uuid(checkpoint):
+            bindings = [("checkpoint", checkpoint)]
+        else:
+            bindings = [("pretrained_model", checkpoint), ("checkpoint", None)]
+
+        with scopes.binding_by_name_scopes(bindings):
+            ft_model = _initializer()
+            with scopes.binding_by_name_scope("model", ft_model):
+                ft_model = _builder(ft_model)
+                ft_model = _loader(ft_model)
+
+        if checkpoint is not None:
+            fisher_matrix_uuid = checkpoint_to_fisher_matrix_uuid[checkpoint]
+        else:
+            fisher_matrix_uuid = checkpoint_to_fisher_matrix_uuid[pretrained_model]
+
+        logging.info(f"Retrieving saved fisher matrix: {fisher_matrix_uuid}")
+        with storage.retrieve_blob_as_tempfile(fisher_matrix_uuid) as f:
+            logging.info(f"Loading retrieved fisher matrix: {fisher_matrix_uuid}")
+            fisher_matrix = diagonal.DiagonalFisherMatrix.load(f.name)
+
+        return MergableModel(model=ft_model, fisher_matrix=fisher_matrix)
+
+
 ###############################################################################
 
 
@@ -110,6 +157,8 @@ def diagonal_model_merger(
     _builder,
     _metrics=None,
     min_fisher=1e-6,
+    normalize_fishers=False,
+    multitask_merge=False,
 ):
     to_be_merged = _initializer()
     with scopes.binding_by_name_scope("model", to_be_merged):
@@ -119,8 +168,9 @@ def diagonal_model_merger(
             to_be_merged,
             mergeable_models,
             weightings,
-            single_task=True,
+            single_task=not multitask_merge,
             min_fisher=min_fisher,
+            normalize_fishers=normalize_fishers,
         )
 
         for merged in merged_models:
@@ -150,6 +200,8 @@ def diagonal_model_merge_weighting_search(
     _builder,
     _model_scorer,
     min_fisher=1e-6,
+    multitask_merge=False,
+    merge_on_cpu=False,
 ):
     to_be_merged = _initializer()
     with scopes.binding_by_name_scope("model", to_be_merged):
@@ -167,6 +219,8 @@ def diagonal_model_merge_weighting_search(
             max_evals=merge_weighting_search_steps,
             num_inits=merge_weighting_num_inits,
             min_fisher=min_fisher,
+            single_task=not multitask_merge,
+            merge_on_cpu=merge_on_cpu,
         )
 
     merged_model.compile()
@@ -184,7 +238,7 @@ def diagonal_regularize_ewc_from_initial(
     storage,
     reg_strength=0.0,
 ):
-    assert not model.is_roberta
+    assert not model.is_hf
     if not reg_strength:
         return model
 
