@@ -130,8 +130,10 @@ class BertMlm(tf.keras.Model, model_abcs.FisherableModel):
 ###############################################################################
 
 
-def get_untrained_bert(pretrained_model, fetch_dir=None):
-    bert_layer = bert_common.get_bert_layer(pretrained_model, fetch_dir=fetch_dir)
+def get_untrained_bert(pretrained_model, fetch_dir=None, hf_back_compat=True):
+    bert_layer = bert_common.get_bert_layer(
+        pretrained_model, fetch_dir=fetch_dir, hf_back_compat=hf_back_compat
+    )
     return BertMlm(bert_layer)
 
 

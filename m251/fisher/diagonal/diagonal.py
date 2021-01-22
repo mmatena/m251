@@ -36,6 +36,7 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
         trainable_weights = self.model.get_mergeable_variables()
 
         with tf.GradientTape(persistent=True) as tape:
+            tape.watch(trainable_weights)
             logits = self.model.compute_logits(x, training=False)
             log_probs = tf.nn.log_softmax(logits, axis=-1)
         probs = tf.nn.softmax(logits)  # [batch, num_classes]
@@ -81,6 +82,8 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
         trainable_weights = self.model.get_mergeable_variables()
 
         with tf.GradientTape(persistent=True) as tape:
+            tape.watch(trainable_weights)
+
             # log_probs.shape = [y_samples, batch]
             log_probs = self.model.log_prob_of_y_samples(
                 data, num_samples=self.y_samples, training=False
@@ -135,15 +138,6 @@ class DiagonalFisherMatrix(fisher_abcs.FisherMatrix):
         return self.fisher_diagonals
 
 
-@tf.function
-def _merge_var(var, weighting, merge_vars, diags, min_fisher):
-    diags = tf.maximum(diags, min_fisher)
-    merge_vars = tf.stack(merge_vars)
-    lhs = tf.einsum("m,m...->...", weighting, diags)
-    rhs = tf.einsum("m,m...,m...->...", weighting, diags, merge_vars)
-    var.assign(rhs / lhs)
-
-
 def merge_models(
     merged_model,
     mergeable_models,
@@ -173,35 +167,21 @@ def merge_models(
                 diag = fisher_matrix.get_diagonals()[i]
                 if not single_task or j == 0:
                     diag = tf.maximum(diag, min_fisher)
+                mvar = model.get_mergeable_variables()[i]
 
                 tmp = weight * diag
                 lhs.append(tmp)
-                rhs.append(tmp * model.get_mergeable_variables()[i])
+                rhs.append(tmp * mvar)
             rhs = tf.reduce_sum(rhs, axis=0)
             lhs = tf.reduce_sum(lhs, axis=0)
             var.assign(rhs / lhs)
 
-        # untrainable_dst_vars = [v for v in merged_model.get_mergeable_body().variables if not v.trainable]
-        # untrainable_src_vars = [
-        #     [v for v in m.model.get_mergeable_body().variables if not v.trainable]
-        #     for m in mergeable_models
-        # ]
-
-        # for i, var in enumerate(untrainable_dst_vars):
-        #     lhs = []
-        #     rhs = []
-        #     for weight, src_vars in zip(weighting, untrainable_src_vars):
-        #         lhs.append(weight)
-        #         rhs.append(weight * src_vars[i])
-        #     rhs = tf.reduce_sum(rhs, axis=0)
-        #     lhs = tf.reduce_sum(lhs, axis=0)
-        #     var.assign(rhs / lhs)
-
-    if single_task:
-        heads = [mergeable_models[0].model.get_classifier_head()]
-    else:
-        heads = [m.model.get_classifier_head() for m in mergeable_models]
-    merged_model.set_classifier_heads(heads)
+    if not getattr(merged_model, "all_variables_mergeable", False):
+        if single_task:
+            heads = [mergeable_models[0].model.get_classifier_head()]
+        else:
+            heads = [m.model.get_classifier_head() for m in mergeable_models]
+        merged_model.set_classifier_heads(heads)
 
     return merged_model
 

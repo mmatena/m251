@@ -60,16 +60,21 @@ def merge_and_evaluate_from_checkpoints(
     _model_merger,
     _evaluate_model,
     multitask_merge=False,
+    additional_model_bindings=None,
 ):
     assert len(checkpoints) == len(tasks)
+    additional_model_bindings = additional_model_bindings or len(tasks) * [[]]
 
     mergeable_models = []
-    for checkpoint, task in zip(checkpoints, tasks):
+    for checkpoint, task, extra_bindings in zip(
+        checkpoints, tasks, additional_model_bindings
+    ):
         bindings = [
             ("checkpoint", checkpoint),
             ("tasks", [task]),
             ("task", task),
         ]
+        bindings.extend(extra_bindings)
         with scopes.binding_by_name_scopes(bindings):
             mergeable_model = _mergeable_model()
             mergeable_models.append(mergeable_model)

@@ -49,7 +49,12 @@ _glue_output_modes["boolq"] = "classification"
 
 
 def convert_dataset_to_features(
-    dataset, tokenizer, max_length, task, stsb_num_bins=STSB_NUM_BINS
+    dataset,
+    tokenizer,
+    max_length,
+    task,
+    label_map_overrides=None,
+    stsb_num_bins=STSB_NUM_BINS,
 ):
     """Note that this is only for single examples; won't work with batched inputs.
 
@@ -59,6 +64,7 @@ def convert_dataset_to_features(
     case of large datasets. However, this method has negligible upfront cost and iteration
     over the returned dataset probably won't be a bottleneck with models used in practice.
     """
+    og_task = task
     task = _to_hf_task_name(task)
     pad_token = tokenizer.pad_token_id
     # NOTE: Not sure if this is correct, but it matches up for BERT. RoBERTa does
@@ -95,7 +101,10 @@ def convert_dataset_to_features(
         token_type_ids = tf.constant(token_type_ids, dtype=tf.int32)
 
         if output_mode == "classification":
-            label = tf.constant(label_map[example.label], dtype=tf.int64)
+            label = label_map[example.label]
+            if label_map_overrides and og_task in label_map_overrides:
+                label = label_map_overrides[og_task][label]
+            label = tf.constant(label, dtype=tf.int64)
         else:
             label = float(example.label)
             assert 0.0 <= label <= 5.0, f"Out of range STS-B label {label}."
@@ -142,10 +151,13 @@ def convert_dataset_to_features(
 
 
 @executable.executable()
-def glue_preprocessor(dataset, task, tokenizer, sequence_length):
+def glue_preprocessor(
+    dataset, task, tokenizer, sequence_length, glue_label_map_overrides=None
+):
     return convert_dataset_to_features(
         dataset,
         tokenizer,
         max_length=sequence_length,
         task=task,
+        label_map_overrides=glue_label_map_overrides,
     )

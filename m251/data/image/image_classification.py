@@ -47,14 +47,16 @@ def image_classification_preprocessor(
     dataset,
     image_size,
     split,
+    color_distort=False,
+    test_crop=True,
 ):
     is_training = split == "train"
     return _preprocess_for_classification(
         dataset,
         image_size=image_size,
         is_training=is_training,
-        color_distort=False,
-        test_crop=True,
+        color_distort=color_distort,
+        test_crop=test_crop,
     )
 
 

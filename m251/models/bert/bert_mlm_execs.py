@@ -10,8 +10,10 @@ from . import bert_mlm
 
 
 @executable.executable()
-def bert_initializer(pretrained_model, fetch_dir=None):
-    return bert_mlm.get_untrained_bert(pretrained_model, fetch_dir=fetch_dir)
+def bert_initializer(pretrained_model, fetch_dir=None, hf_back_compat=True):
+    return bert_mlm.get_untrained_bert(
+        pretrained_model, fetch_dir=fetch_dir, hf_back_compat=hf_back_compat
+    )
 
 
 @executable.executable()

@@ -14,9 +14,12 @@ from . import extractive_qa as eqa
         "tokenizer": bert_common.bert_tokenizer,
     }
 )
-def bert_initializer(pretrained_model, tokenizer, fetch_dir=None):
+def bert_initializer(pretrained_model, tokenizer, fetch_dir=None, hf_back_compat=True):
     return eqa.get_untrained_bert(
-        pretrained_model, pad_token_id=tokenizer.pad_token_id, fetch_dir=fetch_dir
+        pretrained_model,
+        pad_token_id=tokenizer.pad_token_id,
+        fetch_dir=fetch_dir,
+        hf_back_compat=hf_back_compat,
     )
 
 

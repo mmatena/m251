@@ -45,8 +45,12 @@ MERGE_MLM_S2ORC_NORMALIZED_BEST_CKPT_JSON = result_file(
     "nlp/dom_adapt/merge_mlm_s2orc_normalized_best_ckpt.json"
 )
 
+MERGE_MLM_S2ORC_NORMALIZED_ALL_CKPT_JSON = result_file(
+    "nlp/dom_adapt/merge_mlm_s2orc_normalized_all_ckpt.json"
+)
 
-def create_json(merge_exp, no_group_by_ckpt_index=False):
+
+def create_json(merge_exp, group_by_ckpt_index=True, group_by_finetuned_model=False):
     with merge_exp.get_storage() as storage:
         exps_data = storage.retrieve_storage_data(experiment_uuid=[merge_exp.uuid])
 
@@ -72,8 +76,10 @@ def create_json(merge_exp, no_group_by_ckpt_index=False):
         hyperparams = {
             "task": target_mtm.task,
         }
-        if not no_group_by_ckpt_index:
+        if group_by_ckpt_index:
             hyperparams["target_ckpt_index"] = params.target_ckpt_index
+        if group_by_finetuned_model:
+            hyperparams["train_run_uuid"] = target_mtm.train_run_uuid
         items.append(
             {
                 "task": target_mtm.task,
@@ -90,13 +96,27 @@ def create_json(merge_exp, no_group_by_ckpt_index=False):
     return items
 
 
-def create_csv_table(filepath, round_digits=1, no_group_by_ckpt_index=False):
+def create_csv_table(
+    filepath, round_digits=1, group_by_ckpt_index=True, best_per_finetuned_model=False
+):
     items = result_utils.load_json(filepath)
 
     row_groups = collections.defaultdict(list)
     for item in items:
         group_key = hashabledict(item["hyperparams"])
         row_groups[group_key].append(item)
+
+    if best_per_finetuned_model:
+        new_row_groups = collections.defaultdict(list)
+        for hp, row_items in row_groups.items():
+            # TODO: get best original score as well
+            best = max(row_items, key=lambda r: get_single_score(r["merged_score"]))
+
+            new_key = dict(hp)
+            del new_key["train_run_uuid"]
+            new_key = hashabledict(new_key)
+            new_row_groups[new_key].append(best)
+        row_groups = new_row_groups
 
     header = [
         "task",
@@ -121,7 +141,7 @@ def create_csv_table(filepath, round_digits=1, no_group_by_ckpt_index=False):
         )
         row = [
             hp["task"],
-            "-" if no_group_by_ckpt_index else hp["target_ckpt_index"],
+            hp["target_ckpt_index"] if group_by_ckpt_index else "-",
             round(np.mean(merged_scores), round_digits),
             round(np.std(merged_scores), round_digits),
             #
@@ -150,14 +170,29 @@ if __name__ == "__main__":
 
     ###########################################################################
 
-    merge_exp = merge.Merge_MlmS2orc_Normalized_BestCkpt
-    summary = create_json(merge_exp, no_group_by_ckpt_index=True)
-    filepath = MERGE_MLM_S2ORC_NORMALIZED_BEST_CKPT_JSON
+    merge_exp = merge.Merge_MlmS2orc_Normalized_AllCkpt
+    summary = create_json(
+        merge_exp, group_by_ckpt_index=False, group_by_finetuned_model=True
+    )
+    filepath = MERGE_MLM_S2ORC_NORMALIZED_ALL_CKPT_JSON
     with open(filepath, "w") as f:
         json.dump(summary, f, indent=2)
 
-    t = create_csv_table(filepath, no_group_by_ckpt_index=True)
+    t = create_csv_table(
+        filepath, group_by_ckpt_index=False, best_per_finetuned_model=True
+    )
     print(t)
+
+    ###########################################################################
+
+    # merge_exp = merge.Merge_MlmS2orc_Normalized_BestCkpt
+    # summary = create_json(merge_exp, group_by_ckpt_index=False)
+    # filepath = MERGE_MLM_S2ORC_NORMALIZED_BEST_CKPT_JSON
+    # with open(filepath, "w") as f:
+    #     json.dump(summary, f, indent=2)
+
+    # t = create_csv_table(filepath, group_by_ckpt_index=False)
+    # print(t)
 
     ###########################################################################
 

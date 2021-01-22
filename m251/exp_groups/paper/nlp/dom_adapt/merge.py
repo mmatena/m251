@@ -420,6 +420,21 @@ class Merge_MlmS2orc_Normalized_LastCkpt(ExperimentAbc):
     pass
 
 
+@experiment.experiment(
+    uuid="db5531035dfa4eb38d41627ffbf96716",
+    varying_params=functools.partial(
+        create_varying_params_s2orc,
+        train_exp=Finetune_LowResource,
+        target_fisher_exp=FisherComputation_TargetTask,
+        donor_fisher_exp=FisherComputation_MlmS2orc,
+        target_ckpt_index=None,
+    ),
+    **COMMON_EXP_KWARGS,
+)
+class Merge_MlmS2orc_Normalized_AllCkpt(ExperimentAbc):
+    pass
+
+
 ###############################################################################
 ###############################################################################
 

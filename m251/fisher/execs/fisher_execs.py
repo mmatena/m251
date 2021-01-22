@@ -40,8 +40,11 @@ def fisher_matrix_saver(fisher_matrix, storage, fisher_type):
         "split": "train",
     },
 )
-def fisher_computation(dataset, compiled_fisher_computer, _fisher_matrix_saver):
-    compiled_fisher_computer.fit(dataset, epochs=1)
+def fisher_computation(
+    dataset, compiled_fisher_computer, _fisher_matrix_saver, num_dataset_passes=1
+):
+    # The `num_dataset_passes` binding is useful when we are sampling to compute the Fisher.
+    compiled_fisher_computer.fit(dataset, epochs=num_dataset_passes)
     fisher_matrix = compiled_fisher_computer.get_fisher_matrix()
     saved_fisher_matrix = _fisher_matrix_saver(fisher_matrix)
     return saved_fisher_matrix

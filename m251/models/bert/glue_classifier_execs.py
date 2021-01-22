@@ -14,9 +14,21 @@ from . import glue_classifier as bert_gc
         "transformers==3.0.2",
     ],
 )
-def bert_initializer(pretrained_model, tasks, fetch_dir=None):
+def bert_initializer(
+    pretrained_model,
+    tasks,
+    fetch_dir=None,
+    hf_back_compat=True,
+    pretrained_body_only=False,
+    use_roberta_head=False,
+):
     return bert_gc.get_untrained_bert(
-        pretrained_model, tasks=tasks, fetch_dir=fetch_dir
+        pretrained_model,
+        tasks=tasks,
+        fetch_dir=fetch_dir,
+        hf_back_compat=hf_back_compat,
+        pretrained_body_only=pretrained_body_only,
+        use_roberta_head=use_roberta_head,
     )
 
 

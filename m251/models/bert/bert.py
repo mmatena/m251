@@ -14,9 +14,14 @@ _DEFAULT_FETCH_DIR = "~/.pretrained_bert"
 
 _BERT_MODELS_GOOGLE = {
     "tiny": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-2_H-128_A-2.zip",
-    "mini": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-4_H-256_A-4",
-    "small": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-4_H-512_A-8",
-    "medium": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-8_H-512_A-8",
+    #
+    # "mini": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-4_H-256_A-4",
+    # "small": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-4_H-512_A-8",
+    # "medium": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-8_H-512_A-8",
+    "mini": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-4_H-256_A-4.zip",
+    "small": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-4_H-512_A-8.zip",
+    "medium": "https://storage.googleapis.com/bert_models/2020_02_20/uncased_L-8_H-512_A-8.zip",
+    #
     "base": "https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-12_H-768_A-12.zip",
     "large": "https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-24_H-1024_A-16.zip",
 }
@@ -51,11 +56,13 @@ def _get_google_bert_model(model_name, fetch_dir=None):
         return fetched_dir
 
 
-def get_bert_layer(model_name, fetch_dir=None, name="bert", roberta_back_compat=True):
+def get_bert_layer(
+    model_name, fetch_dir=None, name="bert", hf_back_compat=True, body_only=False
+):
     if model_name in _ROBERTA_CHECKPOINTS:
         # NOTE: This will be pretrained unlike if we chose a bert model.
         return roberta.get_pretrained_roberta(
-            model_name, roberta_back_compat=roberta_back_compat
+            model_name, hf_back_compat=hf_back_compat, body_only=body_only
         )
 
     model_dir = _get_google_bert_model(model_name, fetch_dir)

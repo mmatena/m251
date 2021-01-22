@@ -114,12 +114,20 @@ def diagonal_mergeable_model_from_checkpoint_or_pretrained(
     _builder,
     _loader,
     storage,
+    pretrained_full_model=True,
+    mergeable_model_pretrained_model=None,
 ):
     with tf.device("/cpu"):
         if checkpoint is None or _is_uuid(checkpoint):
             bindings = [("checkpoint", checkpoint)]
+            if mergeable_model_pretrained_model:
+                bindings.append(("pretrained_model", mergeable_model_pretrained_model))
         else:
-            bindings = [("pretrained_model", checkpoint), ("checkpoint", None)]
+            bindings = [
+                ("pretrained_model", checkpoint),
+                ("checkpoint", None),
+                ("pretrained_body_only", not pretrained_full_model),
+            ]
 
         with scopes.binding_by_name_scopes(bindings):
             ft_model = _initializer()

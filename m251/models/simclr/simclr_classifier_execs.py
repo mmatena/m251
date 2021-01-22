@@ -6,15 +6,21 @@ from del8.core.di import scopes
 from del8.executables.models import checkpoints as ckpt_exec
 
 from m251.models import model_execs
+from . import simclr
 from . import simclr_classifier
 
 
 @executable.executable()
-def simclr_initializer(pretrained_model, tasks, fetch_dir=None):
+def simclr_initializer(
+    pretrained_model, tasks, fetch_dir=None, all_variables_mergeable=False
+):
     # NOTE: Unlike simclr, this will return a model that has been
     # initialized with the pretrained SimCLR weights.
     return simclr_classifier.get_initialized_simclr(
-        pretrained_model, tasks=tasks, fetch_dir=fetch_dir
+        pretrained_model,
+        tasks=tasks,
+        fetch_dir=fetch_dir,
+        all_variables_mergeable=all_variables_mergeable,
     )
 
 
@@ -31,11 +37,18 @@ def simclr_builder(model, tasks, image_size):
         "model_checkpoint_loader": ckpt_exec.checkpoint_loader,
     }
 )
-def simclr_loader(model, _model_checkpoint_loader, checkpoint=None):
+def simclr_loader(
+    model, _model_checkpoint_loader, checkpoint=None, pretrained_body_only=True
+):
     # NOTE: Since our SimCLR initializer loads the pretrained weights upon initialization,
     # we do not load the pretrained weights here as they will be already loaded.
     if checkpoint:
         model = _model_checkpoint_loader(model, checkpoint=checkpoint)
+    elif not pretrained_body_only:
+        head = model.get_classifier_head()
+        body = model.get_mergeable_body()
+        head_weights = simclr.LOADED_HEAD_WEIGHTS_WEAK_MAP[body]
+        simclr.set_simclr_variables(head.variables, head_weights)
     return model
 
 

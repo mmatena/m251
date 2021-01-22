@@ -125,3 +125,6 @@ LOW_RESOURCE_EPOCHS = 10
 )
 class Finetune_LowResource(ExperimentAbc):
     pass
+
+
+# "hf_back_compat": False,

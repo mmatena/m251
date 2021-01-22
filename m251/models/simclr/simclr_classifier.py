@@ -9,13 +9,15 @@ from . import simclr as simclr_common
 
 
 class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
-    def __init__(self, base, tasks, **kwargs):
+    def __init__(self, base, tasks, all_variables_mergeable=False, **kwargs):
         super().__init__(**kwargs)
         self.base = base
 
         self.tasks = tasks
         self.num_tasks = len(tasks)
         self.num_classes = [IMAGE_CLASSIFICATION_NUM_LABELS[t] for t in tasks]
+
+        self.all_variables_mergeable = all_variables_mergeable
 
         # TODO: There is probably a better way to get this custom loss working.
         self.custom_loss = _make_multitask_loss(
@@ -27,7 +29,7 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
             tf.keras.layers.Dense(
                 units,
                 activation=None,
-                name=f"classifier_head_{i}",
+                name="dense",
             )
             for i, units in enumerate(self.num_classes)
         ]
@@ -126,13 +128,10 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
     #############################################
 
     def get_mergeable_body(self):
-        # Probably should return something like a keras layer.
-        return self.base
+        return self if self.all_variables_mergeable else self.base
 
     def get_mergeable_variables(self):
-        # Should return list of tf.Variables.
-        # return self.base.trainable_weights
-        return self.base.trainable_variables
+        return self.get_mergeable_body().variables
 
     #############################################
 
@@ -171,9 +170,13 @@ class SimclrClassifier(tf.keras.Model, model_abcs.MergeableModel):
         return IMAGE_CLASSIFICATION_NUM_LABELS[task]
 
 
-def get_initialized_simclr(model_name, tasks, fetch_dir=None):
+def get_initialized_simclr(
+    model_name, tasks, fetch_dir=None, all_variables_mergeable=False
+):
     base = simclr_common.get_pretrained_simclr(model_name, fetch_dir=fetch_dir)
-    return SimclrClassifier(base, tasks=tasks)
+    return SimclrClassifier(
+        base, tasks=tasks, all_variables_mergeable=all_variables_mergeable
+    )
 
 
 def _make_multitask_loss(loss, num_tasks):

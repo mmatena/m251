@@ -17,12 +17,15 @@ class BertExtractiveQa(tf.keras.Model, model_abcs.MergeableModel):
 
         self.custom_loss = extractive_qa_loss
 
-        self.head = tf.keras.layers.Dense(
-            units=2,
-            activation=None,
-            # kernel_regularizer=tf.keras.regularizers.l2(lmbda_head),
-            name="extractive_qa_head",
-        )
+        if self.is_hf and getattr(bert_layer, "head", None):
+            self.head = bert_layer.head
+
+        else:
+            self.head = tf.keras.layers.Dense(
+                units=2,
+                activation=None,
+                name="extractive_qa_head",
+            )
 
         self.regularizers = []
 
@@ -30,18 +33,21 @@ class BertExtractiveQa(tf.keras.Model, model_abcs.MergeableModel):
     def is_hf(self):
         return getattr(self.bert_layer, "is_hf", False)
 
+    def _mask_padding_logits(self, logits, input_ids):
+        padding = tf.cast(tf.equal(input_ids, self.pad_token_id), tf.float32)
+        padding = tf.expand_dims(padding, -1)
+        # Remove the masked out regions.
+        return logits * (1 - padding) - 1e9 * padding
+
     def call(self, x, training=None, mask=None):
         inputs = x["input_ids"]
         token_type_ids = x["token_type_ids"]
 
         out = self.bert_layer([inputs, token_type_ids], training=training, mask=mask)
-
         out = self.head(out, training=training)
-        padding = tf.cast(tf.equal(inputs, self.pad_token_id), tf.float32)
-        padding = tf.expand_dims(padding, -1)
 
         # Remove the masked out regions.
-        out = out * (1 - padding) - 1e9 * padding
+        out = self._mask_padding_logits(out, inputs)
 
         # logits.shape = [2, batch, sequence_length]
         logits = tf.transpose(out, [2, 0, 1])
@@ -131,7 +137,23 @@ class BertExtractiveQa(tf.keras.Model, model_abcs.MergeableModel):
         return logits["logits"]
 
     def log_prob_of_y_samples(self, data, num_samples, training=None, mask=None):
-        raise NotImplementedError
+        x, _ = data
+
+        # logits.shape = [2, batch, sequence_length]
+        logits = self.compute_logits(x, training=training, mask=mask)
+
+        samples = tfp.distributions.Categorical(logits=logits).sample([num_samples])
+        # samples.shape = [num_samples, 2, batch, sequence_length]
+        samples = tf.one_hot(samples, depth=tf.shape(logits)[-1])
+
+        log_probs = tf.nn.log_softmax(logits, axis=-1)
+        log_probs = tf.einsum(
+            "tbl,stbl->sb",
+            log_probs,
+            tf.cast(samples, tf.float32),
+        )
+
+        return log_probs
 
 
 ###############################################################################
@@ -163,6 +185,8 @@ def extractive_qa_loss(y_true, y_pred):
 ###############################################################################
 
 
-def get_untrained_bert(architecture, pad_token_id, fetch_dir=None):
-    bert_layer = bert_common.get_bert_layer(architecture, fetch_dir=fetch_dir)
+def get_untrained_bert(architecture, pad_token_id, fetch_dir=None, hf_back_compat=True):
+    bert_layer = bert_common.get_bert_layer(
+        architecture, fetch_dir=fetch_dir, hf_back_compat=hf_back_compat
+    )
     return BertExtractiveQa(bert_layer, pad_token_id=pad_token_id)

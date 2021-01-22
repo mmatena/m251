@@ -46,9 +46,14 @@ _TASK_TO_METRICS = {
     "hyperpartisan": [metrics.macro_f1],
     "helpfulness": [metrics.macro_f1],
     #
+    # NOTE: Some of these below should be mean per class accuracy.
+    "cars196": [metrics.accuracy],
+    "cifar10": [metrics.accuracy],
     "cifar100": [metrics.accuracy],
     "dtd": [metrics.accuracy],
+    "food101": [metrics.accuracy],
     "oxford_iiit_pet": [metrics.accuracy],
+    "oxford_flowers102": [metrics.accuracy],
 }
 
 

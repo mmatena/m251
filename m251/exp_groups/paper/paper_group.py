@@ -88,11 +88,16 @@ class ParamsAbc(abc.ABC):
 ###############################################################################
 
 
-def create_pairwise_weightings(num_weightings):
+def create_pairwise_weightings(num_weightings, min_target_weighting=None):
     num_weightings -= 2
     denom = num_weightings + 1
     weightings = [((i + 1) / denom, 1 - (i + 1) / denom) for i in range(num_weightings)]
     weightings = [(0.0, 1.0)] + weightings + [(1.0, 0.0)]
+    weightings.reverse()
+
+    if min_target_weighting is not None:
+        weightings = [w for w in weightings if w[0] >= min_target_weighting]
+
     return weightings
 
 
@@ -105,5 +110,6 @@ class ModelToMerge(object):
         fisher_run_uuid,
         model_checkpoint_uuid,
         fisher_matrix_uuid,
+        additional_model_bindings=None,
     ):
         pass

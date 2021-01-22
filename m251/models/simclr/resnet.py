@@ -535,13 +535,13 @@ class ProjectionHead(tf.keras.layers.Layer):
 class SimClrBaseModel(tf.keras.models.Model):
     """Resnet model with projection or supervised layer."""
 
-    def __init__(self, depth, width_multiplier, **kwargs):
+    def __init__(self, depth, width_multiplier, finetune_layer=1, **kwargs):
         super().__init__(**kwargs)
         self.resnet_model = resnet(
             resnet_depth=depth,
             width_multiplier=width_multiplier,
         )
-        self._projection_head = ProjectionHead()
+        self._projection_head = ProjectionHead(finetune_layer=finetune_layer)
 
     def call(self, inputs, training=None):
         features = inputs

@@ -16,7 +16,8 @@ from m251.exp_groups.paper.nlp.dom_adapt import merge
 # EXP = merge.Merge_MlmTargetTask_Normalized_AclArc_BestCkpt
 # EXP = merge.Merge_MlmTargetTask_Normalized_SciErc_Ckpt8
 # EXP = merge.Merge_MlmS2orc_Normalized_LastCkpt
-EXP = merge.Merge_MlmS2orc_Normalized_BestCkpt
+# EXP = merge.Merge_MlmS2orc_Normalized_BestCkpt
+EXP = merge.Merge_MlmS2orc_Normalized_AllCkpt
 
 execution_items = EXP.create_all_execution_items()
 print(f"Number of execution items to process: {len(execution_items)}")
@@ -24,7 +25,7 @@ print(f"Number of execution items to process: {len(execution_items)}")
 vast_params = vastai.create_supervisor_params(
     EXP,
     execution_items=execution_items,
-    num_workers=5,
+    num_workers=10,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [

@@ -3,6 +3,8 @@ import bert
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from transformers.modeling_tf_roberta import TFRobertaClassificationHead
+
 from m251.data.processing.constants import NUM_GLUE_LABELS
 from m251.models import model_abcs
 
@@ -10,23 +12,32 @@ from . import bert as bert_common
 
 
 class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
-    def __init__(self, bert_layer, tasks, **kwargs):
+    def __init__(self, bert_layer, tasks, use_roberta_head=False, **kwargs):
         super().__init__(**kwargs)
         self.bert_layer = bert_layer
         self.tasks = tasks
         self.num_tasks = len(tasks)
         self.num_classes = [NUM_GLUE_LABELS[t] for t in tasks]
+        self.use_roberta_head = use_roberta_head
 
-        if self.is_hf and hasattr(bert_layer, "head") and len(tasks) == 1:
+        if self.is_hf and getattr(bert_layer, "head", None) and len(tasks) == 1:
             # In this case, we are loading a pretrained classifier with its
             # pretrained head.
             self.heads = [bert_layer.head]
+
+        elif use_roberta_head:
+            self.heads = []
+            for class_count in self.num_classes:
+                config = bert_layer.params
+                config_copy = config.from_dict(config.to_dict())
+                setattr(config_copy, "num_labels", class_count)
+                self.heads.append(TFRobertaClassificationHead(config_copy))
+
         else:
             self.heads = [
                 tf.keras.layers.Dense(
                     units,
                     activation=None,
-                    # kernel_regularizer=tf.keras.regularizers.l2(lmbda_head),
                     name=f"classifier_head_{i}",
                 )
                 for i, units in enumerate(self.num_classes)
@@ -46,6 +57,8 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
     @property
     def head_input_has_sequence_dim(self):
+        if self.use_roberta_head:
+            return True
         return getattr(self.bert_layer, "head_input_has_sequence_dim", False)
 
     def _get_cls_representation_from_body_output(self, out):
@@ -197,9 +210,23 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         return log_probs
 
 
-def get_untrained_bert(architecture, tasks, fetch_dir=None):
-    bert_layer = bert_common.get_bert_layer(architecture, fetch_dir=fetch_dir)
-    return BertGlueClassifier(bert_layer, tasks=tasks)
+def get_untrained_bert(
+    architecture,
+    tasks,
+    fetch_dir=None,
+    hf_back_compat=True,
+    pretrained_body_only=False,
+    use_roberta_head=False,
+):
+    bert_layer = bert_common.get_bert_layer(
+        architecture,
+        fetch_dir=fetch_dir,
+        hf_back_compat=hf_back_compat,
+        body_only=pretrained_body_only,
+    )
+    return BertGlueClassifier(
+        bert_layer, tasks=tasks, use_roberta_head=use_roberta_head
+    )
 
 
 def _make_multitask_loss(loss, num_tasks):
