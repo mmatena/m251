@@ -21,6 +21,8 @@ def bert_initializer(
     hf_back_compat=True,
     pretrained_body_only=False,
     use_roberta_head=False,
+    all_variables_mergeable=False,
+    freeze_body=False,
 ):
     return bert_gc.get_untrained_bert(
         pretrained_model,
@@ -29,6 +31,8 @@ def bert_initializer(
         hf_back_compat=hf_back_compat,
         pretrained_body_only=pretrained_body_only,
         use_roberta_head=use_roberta_head,
+        all_variables_mergeable=all_variables_mergeable,
+        freeze_body=freeze_body,
     )
 
 

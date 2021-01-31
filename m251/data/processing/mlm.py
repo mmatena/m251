@@ -152,6 +152,9 @@ def convert_dataset_to_features(
         # Ensure the shape is known as this is often needed for downstream steps.
         return tf.reshape(x, [sequence_length])
 
+    def zero_to_pad_token(x):
+        return tf.where(tf.equal(x, 0), pad_token, x)
+
     def process_tokenized_fn(input_ids, token_type_ids):
         input_ids, tokens_to_predict = mask_fn(input_ids)
 
@@ -159,6 +162,14 @@ def convert_dataset_to_features(
         input_ids = pad(input_ids)
         tokens_to_predict = pad(tokens_to_predict)
         token_type_ids = pad(token_type_ids)
+
+        tokens_to_predict = zero_to_pad_token(tokens_to_predict)
+        token_type_ids = tf.zeros_like(token_type_ids)
+
+        # tf.print('input_ids', input_ids, summarize=-1)
+        # tf.print('tokens_to_predict', tokens_to_predict, summarize=-1)
+        # tf.print('token_type_ids', token_type_ids, summarize=-1)
+        # tf.print('')
 
         x = {
             "input_ids": input_ids,

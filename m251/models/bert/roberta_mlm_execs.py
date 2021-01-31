@@ -49,6 +49,11 @@ def roberta_mlm_metrics(model):
     return model.create_metrics()
 
 
+@executable.executable()
+def roberta_mlm_loss(model):
+    return model.create_loss()
+
+
 @executable.executable(
     default_bindings={
         "tokenizer": bert_common.bert_tokenizer,
@@ -62,6 +67,8 @@ def roberta_mlm_model(
     _initializer,
     _builder,
     _loader,
+    _optimizer=None,
+    _loss=None,
     _metrics=None,
 ):
     model = _initializer()
@@ -71,6 +78,10 @@ def roberta_mlm_model(
         model = _loader(model)
 
         kwargs = {}
+        if _optimizer:
+            kwargs["optimizer"] = _optimizer()
+        if _loss:
+            kwargs["loss"] = _loss()
         if _metrics:
             kwargs["metrics"] = _metrics()
 

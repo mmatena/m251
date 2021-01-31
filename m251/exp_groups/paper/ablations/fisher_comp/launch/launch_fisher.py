@@ -12,14 +12,14 @@ from m251.exp_groups.paper.ablations.fisher_comp import fisher
 
 
 # EXP = fisher.VariationalFisherComputation
-EXP = fisher.DirectFisherComputation
+# EXP = fisher.DirectFisherComputation
+EXP = fisher.FisherComputation_Rte_10Epochs
 
 launch_params = gce.GceParams()
 
 vast_params = vastai.create_supervisor_params(
     EXP,
-    # num_workers=6,
-    num_workers=4,
+    num_workers=5,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [

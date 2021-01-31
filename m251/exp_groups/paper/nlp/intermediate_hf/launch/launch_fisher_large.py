@@ -11,7 +11,8 @@ from del8.executors.vastai import api_wrapper
 from m251.exp_groups.paper.nlp.intermediate_hf import fisher_large
 
 
-EXP = fisher_large.FisherComputation_RobertLargeMnli_Rte_LastCkpt
+# EXP = fisher_large.FisherComputation_RobertLargeMnli_Rte_LastCkpt
+EXP = fisher_large.FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars
 
 
 execution_items = EXP.create_all_execution_items()
@@ -30,7 +31,7 @@ vast_params = vastai.create_supervisor_params(
                 "inet_down > 50",
                 "inet_up > 50",
                 "gpu_ram >= 10",
-                # "dlperf >= 16",
+                "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
             ]
         ),

@@ -25,68 +25,23 @@ result_file = result_utils.result_file
 
 VARIATIONAL_JSON = result_file("ablations/fisher_comp/variational.json")
 DIRECT_JSON = result_file("ablations/fisher_comp/direct.json")
+DIRECT_RTE_10_EPOCH_JSON = result_file("ablations/fisher_comp/direct_rte_10_epoch.json")
+DUMMY_RTE_10_EPOCH_JSON = result_file("ablations/fisher_comp/dummy_rte_10_epoch.json")
 
 
-# @experiment.with_experiment_storages()
-# def create_json(merge_exp, fisher_exp):
-#     fisher_params = {
-#         run_id: fisher_exp.retrieve_run_params(run_id)
-#         for run_id in fisher_exp.retrieve_run_uuids(RunState.FINISHED)
-#     }
-
-#     def get_fisher_examples(mtm):
-#         num_examples = fisher_params[mtm.fisher_run_uuid].num_examples
-#         if num_examples is None:
-#             num_examples = NUM_GLUE_TRAIN_EXAMPLES[mtm.task]
-#         return num_examples
-
-#     items = []
-#     for i, run_id in enumerate(merge_exp.retrieve_run_uuids(RunState.FINISHED)):
-#         print(f'Run {i}')
-
-#         params = merge_exp.retrieve_run_params(run_id)
-
-#         reses = merge_exp.retrieve_items_by_class(
-#             merging_execs.MergingEvaluationResults, run_id
-#         )
-#         res = max(reses, key=lambda r: get_single_score(r.results))
-
-#         og_res = max(reses, key=lambda r: r.weighting[0])
-#         assert og_res.weighting[0] == 1.0
-
-#         donor_body_res = max(reses, key=lambda r: r.weighting[1])
-#         assert donor_body_res.weighting[1] == 1.0
-
-#         target_mtm, donor_mtm = params.models_to_merge
-
-#         items.append(
-#             {
-#                 "task": target_mtm.task,
-#                 "other_task": donor_mtm.task,
-#                 "trial_index": params.trial_index,
-#                 "hyperparams": {
-#                     "target_fisher_examples": get_fisher_examples(target_mtm),
-#                     "donor_fisher_examples": get_fisher_examples(donor_mtm),
-#                 },
-#                 "original_score": og_res.results,
-#                 "merged_score": res.results,
-#                 "donor_body_score": donor_body_res.results,
-#                 "weighting": res.weighting[0],
-#             }
-#         )
-
-#     return items
-
-
-def create_json(merge_exp, fisher_exp):
+def create_json(merge_exp, target_fisher_exp, donor_fisher_exp=None):
+    if not donor_fisher_exp:
+        donor_fisher_exp = target_fisher_exp
     with merge_exp.get_storage() as storage:
         exps_data = storage.retrieve_storage_data(
-            experiment_uuid=[merge_exp.uuid, fisher_exp.uuid]
+            experiment_uuid=tuple(
+                {merge_exp.uuid, target_fisher_exp.uuid, donor_fisher_exp.uuid}
+            )
         )
 
     merge_run_ids = exps_data.get_finished_runs_ids(experiment_uuid=merge_exp.uuid)
 
-    def get_fisher_examples(mtm):
+    def get_fisher_examples(mtm, fisher_exp):
         fisher_run = exps_data.get_run_data(mtm.fisher_run_uuid)
         fisher_params = fisher_run.get_single_item_by_class(fisher_exp.params_cls)
         return fisher_params.num_examples or NUM_GLUE_TRAIN_EXAMPLES[mtm.task]
@@ -112,8 +67,12 @@ def create_json(merge_exp, fisher_exp):
                 "other_task": donor_mtm.task,
                 "trial_index": params.trial_index,
                 "hyperparams": {
-                    "target_fisher_examples": get_fisher_examples(target_mtm),
-                    "donor_fisher_examples": get_fisher_examples(donor_mtm),
+                    "target_fisher_examples": get_fisher_examples(
+                        target_mtm, target_fisher_exp
+                    ),
+                    "donor_fisher_examples": get_fisher_examples(
+                        donor_mtm, donor_fisher_exp
+                    ),
                 },
                 "original_score": og_res.results,
                 "merged_score": res.results,
@@ -162,7 +121,7 @@ def create_csv_table(filepath, round_digits=1):
             #
             round(np.mean(donor_body_scores), round_digits),
             round(np.std(donor_body_scores), round_digits),
-            len(row_items),
+            len(merged_scores),
         ]
         body.append(row)
 
@@ -176,20 +135,49 @@ def create_csv_table(filepath, round_digits=1):
 if __name__ == "__main__":
     from m251.exp_groups.paper.ablations.fisher_comp import fisher
     from m251.exp_groups.paper.ablations.fisher_comp import merge
+    from m251.exp_groups.paper.ablations.fisher_comp import merge2
 
     ###########################################################################
 
-    print("\nVariational:")
-    filepath = VARIATIONAL_JSON
+    # merge_exp = merge2.MergeDirectFishers_Dummy
+    # target_fisher_exp = fisher.FisherComputation_Rte_10Epochs
+    # donor_fisher_exp = fisher.DirectFisherComputation
+    # summary = create_json(merge_exp, target_fisher_exp, donor_fisher_exp)
+    # # s = json.dumps(summary, indent=2)
+    # # print(s)
+    # filepath = DUMMY_RTE_10_EPOCH_JSON
+    # with open(filepath, "w") as f:
+    #     json.dump(summary, f, indent=2)
+    # t = create_csv_table(filepath)
+    # print(t)
+
+    ###########################################################################
+
+    merge_exp = merge2.MergeDirectFishers
+    target_fisher_exp = fisher.FisherComputation_Rte_10Epochs
+    donor_fisher_exp = fisher.DirectFisherComputation
+    summary = create_json(merge_exp, target_fisher_exp, donor_fisher_exp)
+    # s = json.dumps(summary, indent=2)
+    # print(s)
+    filepath = DIRECT_RTE_10_EPOCH_JSON
+    with open(filepath, "w") as f:
+        json.dump(summary, f, indent=2)
     t = create_csv_table(filepath)
     print(t)
 
     ###########################################################################
 
-    print("\nDirect:")
-    filepath = DIRECT_JSON
-    t = create_csv_table(filepath)
-    print(t)
+    # print("\nVariational:")
+    # filepath = VARIATIONAL_JSON
+    # t = create_csv_table(filepath)
+    # print(t)
+
+    ###########################################################################
+
+    # print("\nDirect:")
+    # filepath = DIRECT_JSON
+    # t = create_csv_table(filepath)
+    # print(t)
 
     ###########################################################################
 

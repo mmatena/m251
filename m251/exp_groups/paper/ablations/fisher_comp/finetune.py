@@ -117,3 +117,42 @@ NUM_RTE_TRIALS = 5
 )
 class GlueFinetune(ExperimentAbc):
     pass
+
+
+@experiment.experiment(
+    uuid="4d6510859620483488ad6a05aebe2e36",
+    group=PaperExpGroup,
+    params_cls=FinetuneParams,
+    executable_cls=fitting.training_run,
+    varying_params=[{"task": "rte", "trial_index": i} for i in range(NUM_RTE_TRIALS)],
+    fixed_params={
+        "pretrained_model": "base",
+        #
+        "reg_type": "iso",
+        "reg_strength": 3e-4,
+        #
+        "batch_size": 16,
+        "learning_rate": 1e-5,
+        "sequence_length": 64,
+        #
+        "num_task_epochs": 10,
+        "num_ckpt_saves": 4,
+    },
+    key_fields={
+        "trial_index",
+        "task",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("with_validation", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("callbacks", ckpt_exec.checkpoint_saver_callback),
+        scopes.ArgNameBindingSpec("compiled_model", gc_exe.bert_finetuning_model),
+        #
+        scopes.ArgNameBindingSpec("optimizer", optimizers.adam_optimizer),
+    ],
+)
+class RteFinetune_10Epochs(ExperimentAbc):
+    pass

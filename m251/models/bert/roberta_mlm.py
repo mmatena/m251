@@ -1,4 +1,6 @@
 """TODO: Add title."""
+import functools
+
 import tensorflow as tf
 import tensorflow_probability as tfp
 from transformers import TFRobertaForMaskedLM
@@ -72,6 +74,9 @@ class RobertaMlm(tf.keras.Model, model_abcs.FisherableModel):
         modified_tokens_mask = tf.not_equal(y["tokens_to_predict"], self.pad_token)
         modified_tokens_mask = tf.cast(modified_tokens_mask, tf.float32)
 
+        # tf.print(y["tokens_to_predict"], summarize=-1)
+        # tf.print(modified_tokens_mask, summarize=-1)
+
         log_probs = tf.nn.log_softmax(logits, axis=-1)
         log_probs = tf.einsum(
             "bl,blc,sblc->sb",
@@ -92,7 +97,14 @@ class RobertaMlm(tf.keras.Model, model_abcs.FisherableModel):
         }
 
     def create_metrics(self):
-        return {"tokens_to_predict": bert_mlm.mlm_average_nll}
+        fn = functools.partial(bert_mlm.mlm_average_nll, pad_token_id=self.pad_token)
+        fn.__name__ = "mlm_average_nll"
+        return {"tokens_to_predict": fn}
+
+    def create_loss(self):
+        fn = functools.partial(bert_mlm.mlm_average_nll, pad_token_id=self.pad_token)
+        fn.__name__ = "mlm_average_nll"
+        return {"tokens_to_predict": fn}
 
 
 ###############################################################################

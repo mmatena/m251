@@ -12,13 +12,24 @@ from . import bert as bert_common
 
 
 class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
-    def __init__(self, bert_layer, tasks, use_roberta_head=False, **kwargs):
+    def __init__(
+        self,
+        bert_layer,
+        tasks,
+        use_roberta_head=False,
+        all_variables_mergeable=False,
+        freeze_body=False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.bert_layer = bert_layer
         self.tasks = tasks
         self.num_tasks = len(tasks)
         self.num_classes = [NUM_GLUE_LABELS[t] for t in tasks]
         self.use_roberta_head = use_roberta_head
+        self.freeze_body = freeze_body
+
+        self.all_variables_mergeable = all_variables_mergeable
 
         if self.is_hf and getattr(bert_layer, "head", None) and len(tasks) == 1:
             # In this case, we are loading a pretrained classifier with its
@@ -42,6 +53,12 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
                 )
                 for i, units in enumerate(self.num_classes)
             ]
+
+        if self.freeze_body:
+            if hasattr(self.bert_layer, "freeze"):
+                self.bert_layer.freeze()
+            else:
+                self.bert_layer.trainable = False
 
         # TODO: There is probably a better way to get this custom loss working.
         self.custom_loss = _make_multitask_loss(
@@ -162,7 +179,10 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
         assert len(self.num_classes) == 1
 
     def get_mergeable_body(self):
-        return self.bert_layer
+        if self.all_variables_mergeable:
+            return self
+        else:
+            return self.bert_layer
 
     def get_mergeable_variables(self):
         return self.get_mergeable_body().trainable_weights
@@ -217,6 +237,8 @@ def get_untrained_bert(
     hf_back_compat=True,
     pretrained_body_only=False,
     use_roberta_head=False,
+    all_variables_mergeable=False,
+    freeze_body=False,
 ):
     bert_layer = bert_common.get_bert_layer(
         architecture,
@@ -225,7 +247,11 @@ def get_untrained_bert(
         body_only=pretrained_body_only,
     )
     return BertGlueClassifier(
-        bert_layer, tasks=tasks, use_roberta_head=use_roberta_head
+        bert_layer,
+        tasks=tasks,
+        use_roberta_head=use_roberta_head,
+        all_variables_mergeable=all_variables_mergeable,
+        freeze_body=freeze_body,
     )
 
 

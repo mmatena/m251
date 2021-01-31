@@ -47,6 +47,10 @@ MERGE_FROM_MNLI_RTE_LARGE_JSON = result_file(
     "nlp/intermediate_hf/merge_from_mnli_rte_large.json"
 )
 
+MERGE_MNLI_RTE_LARGE_ENSEMBLE_JSON = result_file(
+    "nlp/intermediate_hf/merge_mnli_rte_large_ensemble.json"
+)
+
 
 def create_json(merge_exp):
     with merge_exp.get_storage() as storage:
@@ -81,13 +85,14 @@ def create_json(merge_exp):
                 "merged_score": res.results,
                 "donor_body_score": donor_body_res.results,
                 "weighting": res.weighting[0],
+                "target_ckpt": target_mtm.model_checkpoint_uuid,
             }
         )
 
     return items
 
 
-def create_csv_table(filepath, round_digits=1):
+def create_csv_table(filepath, round_digits=1, group_by_target_ckpt=False):
     items = result_utils.load_json(filepath)
 
     row_groups = collections.defaultdict(list)
@@ -96,6 +101,7 @@ def create_csv_table(filepath, round_digits=1):
             {
                 "target_task": item["target_task"],
                 "donor_task": item["donor_task"],
+                "target_ckpt": item["target_ckpt"] if group_by_target_ckpt else None,
             }
         )
         row_groups[group_key].append(item)
@@ -146,21 +152,40 @@ def create_csv_table(filepath, round_digits=1):
     return result_utils.csv_to_str(rows)
 
 
-def latex_render_score_subscript(mean, stddev, round_digits=1):
+def latex_render_score_subscript(mean, stddev, round_digits=1, is_orig=False):
+    if mean is None:
+        return "---"
+
     mean = round(mean, round_digits)
     if stddev is None:
-        return f"${mean}$"
-    stddev = round(stddev, round_digits)
-    return f"${mean}_{{{stddev}}}$"
+        ret = f"{mean}"
+    else:
+        stddev = round(stddev, round_digits)
+        ret = f"{mean}_{{{stddev}}}"
+
+    if is_orig:
+        ret = f"\\mathit{{{ret}}}"
+
+    return f"${ret}$"
 
 
-# result_utils.TASK_NICE_NAMES
-def create_latex_table(
+def create_latex_table(  # noqa: C901
     filepath,
     render_score_fn=latex_render_score_subscript,
-    task_order=result_utils.GLUE_TASKS_ORDER,
+    target_task_order=result_utils.GLUE_TASKS_ORDER,
+    donor_task_order=result_utils.GLUE_TASKS_ORDER,
+    no_original_scores=False,
 ):
-    items = result_utils.load_json(filepath)
+    if not isinstance(filepath, (list, tuple)):
+        filepath = [filepath]
+
+    items = []
+    for fp in filepath:
+        its = result_utils.load_json(fp)
+        if "squad_donor" in fp:
+            for it in its:
+                it["donor_task"] = "squad2"
+        items.extend(its)
 
     row_groups = collections.defaultdict(list)
     for item in items:
@@ -173,11 +198,11 @@ def create_latex_table(
         row_groups[group_key].append(item)
 
     def create_donor_to_merge_summary(target_task):
-        ret = collections.defaultdict(list)
+        ret = {}
         for k, v in row_groups.items():
             if k["target_task"] != target_task:
                 continue
-            ret[k["donor_task"]].extend(v)
+            ret[k["donor_task"]] = v
 
         ret2 = {}
         for donor_task, ret_items in ret.items():
@@ -189,22 +214,48 @@ def create_latex_table(
             ret2[donor_task] = (mean, stddev)
         return ret2
 
-    rows = [len(task_order) * [""] for _ in task_order]
+    def get_original_task_summary(task):
+        ret = {}
+        for k, v in row_groups.items():
+            if k["target_task"] != target_task:
+                continue
+            ret[k["donor_task"]] = v
 
-    for col_idx, target_task in enumerate(task_order):
+        if not ret:
+            return None, None
+
+        ret_items = max(ret.values(), key=len)
+        merged_scores = np.array(
+            [get_single_score(item["original_score"]) for item in ret_items]
+        )
+        mean = np.mean(merged_scores)
+        stddev = np.std(merged_scores) if len(ret_items) > 1 else None
+
+        return mean, stddev
+
+    rows = [len(target_task_order) * [""] for _ in donor_task_order]
+
+    for col_idx, target_task in enumerate(target_task_order):
         donor_to_merge_summary = create_donor_to_merge_summary(target_task)
-        for row_idx, donor_task in enumerate(task_order):
+
+        for row_idx, donor_task in enumerate(donor_task_order):
+            if donor_task == target_task and not no_original_scores:
+                mean, stddev = get_original_task_summary(target_task)
+                rows[row_idx][col_idx] = render_score_fn(mean, stddev, is_orig=True)
+                continue
+
             if donor_task not in donor_to_merge_summary:
                 continue
             mean, stddev = donor_to_merge_summary[donor_task]
             rows[row_idx][col_idx] = render_score_fn(mean, stddev)
 
-    for row, task in zip(rows, task_order):
+    for row, task in zip(rows, donor_task_order):
         row.insert(0, result_utils.TASK_NICE_NAMES[task])
 
     rows = [
         R"\toprule",
-        [R"\textbf{Task}"] + [result_utils.TASK_NICE_NAMES[t] for t in task_order],
+        [R"\textbf{Task}"]
+        + [result_utils.TASK_NICE_NAMES[t] for t in target_task_order],
         R"\midrule",
         *rows,
         R"\bottomrule",
@@ -219,8 +270,53 @@ if __name__ == "__main__":
 
     ###########################################################################
 
-    filepath = MERGE_PAIRS_JSON
-    t = create_latex_table(filepath)
+    # filepath = [MERGE_FROM_MNLI_RTE_LARGE_JSON]
+    # t = create_latex_table(
+    #     filepath,
+    #     target_task_order=('rte',),
+    #     donor_task_order=('sst2', 'mrpc', 'stsb', 'rte'),
+    #     no_original_scores=True,
+    # )
+    # print(t)
+
+    ###########################################################################
+
+    # MNLI_TARGETS_ORDER = ("mrpc", "stsb", "rte")
+
+    # filepath = [MERGE_PAIRS_FROM_MNLI_JSON, MERGE_FROM_MNLI_PAIRS_SQUAD_DONOR_JSON]
+    # t = create_latex_table(
+    #     filepath,
+    #     target_task_order=MNLI_TARGETS_ORDER,
+    #     donor_task_order=result_utils.GLUE_TASKS_ORDER + ('squad2',),
+    # )
+    # print(t)
+
+    ###########################################################################
+
+    # filepath = [MERGE_PAIRS_JSON, MERGE_SQUAD_DONOR_JSON, MERGE_SQUAD_DONOR_HIGH_RESOURCE_JSON]
+    # t = create_latex_table(
+    #     filepath,
+    #     target_task_order=result_utils.GLUE_TASKS_ORDER + ('squad2',),
+    #     donor_task_order=result_utils.GLUE_TASKS_ORDER + ('squad2',),
+    # )
+    # print(t)
+
+    ###########################################################################
+    ###########################################################################
+
+    merge_exp = (
+        merge_large.FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars_EnsemblePairs
+    )
+    summary = create_json(merge_exp)
+    # s = json.dumps(summary, indent=2)
+    # print(s)
+
+    filepath = MERGE_MNLI_RTE_LARGE_ENSEMBLE_JSON
+    with open(filepath, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    # t = create_csv_table(filepath, group_by_target_ckpt=True)
+    t = create_csv_table(filepath, group_by_target_ckpt=False)
     print(t)
 
     ###########################################################################

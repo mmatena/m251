@@ -110,6 +110,6 @@ class ModelToMerge(object):
         fisher_run_uuid,
         model_checkpoint_uuid,
         fisher_matrix_uuid,
-        additional_model_bindings=None,
+        additional_model_bindings=(),
     ):
         pass

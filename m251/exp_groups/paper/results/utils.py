@@ -19,6 +19,7 @@ TASK_NICE_NAMES = {
     "mnli": "MNLI",
     "qnli": "QNLI",
     "rte": "RTE",
+    "squad2": "SQuAD",
 }
 
 

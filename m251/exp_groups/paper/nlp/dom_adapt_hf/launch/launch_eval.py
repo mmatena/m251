@@ -9,10 +9,15 @@ from del8.executors.vastai import vastai
 from del8.executors.vastai import api_wrapper
 
 from m251.exp_groups.paper.nlp.dom_adapt_hf import eval as evl
+from m251.exp_groups.paper.nlp.dom_adapt_hf import eval2 as evl2
 
 
 # EXP = evl.Eval_LowResource_Dapt_All
-EXP = evl.Finetune_Dapt_LowResource_All_FOR_REAL
+# EXP = evl.Finetune_Dapt_LowResource_All_FOR_REAL
+# EXP = evl2.Eval_DAPT_LowResource_All
+# EXP = evl2.Eval_Finetune_Pretrained32768_All_TestSet
+# EXP = evl2.Eval_Finetune_PretrainMore_All_TestSet
+EXP = evl2.Eval_FinetunePretrain32768NoReg_All_TestSet
 
 
 execution_items = EXP.create_all_execution_items()

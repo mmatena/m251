@@ -29,6 +29,7 @@ def diagonal_fisher_computer(
     finetuned_ckpt_uuid=None,
     fisher_class_chunk_size=4096,
     y_samples=None,
+    max_grad_value=None,
 ):
     if finetuned_ckpt_uuid is None:
         ctx = contextlib.suppress()
@@ -45,6 +46,7 @@ def diagonal_fisher_computer(
             total_examples=num_examples,
             y_samples=y_samples,
             class_chunk_size=fisher_class_chunk_size,
+            max_grad_value=max_grad_value,
         )
         # NOTE: I don't really think the next binding will ever be used, but I'm
         # putting here out of paranoia.

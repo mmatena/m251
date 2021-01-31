@@ -16,7 +16,6 @@ from m251.data.domains import target_tasks
 from m251.data.glue import glue
 
 from m251.fisher.diagonal import diagonal_execs as diag_execs
-from m251.fisher.diagonal import variational_diagonal_execs as vardiag_execs
 from m251.fisher.execs import fisher_execs
 from m251.fisher.execs import merging_execs
 
@@ -203,6 +202,7 @@ def create_varying_params(
         donor_mtm = _pretrained_to_mtm(donor_params, donor_fishers)
         # print(donor_params.num_examples)
         donor_mtm = donor_mtm.copy(task=target_mtm.task)
+
         varying_params.append(
             {
                 "trial_index": target_param.trial_index,

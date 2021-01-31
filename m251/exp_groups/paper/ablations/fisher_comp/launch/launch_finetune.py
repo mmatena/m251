@@ -11,7 +11,8 @@ from del8.executors.vastai import api_wrapper
 from m251.exp_groups.paper.ablations.fisher_comp import finetune
 
 
-EXP = finetune.GlueFinetune
+# EXP = finetune.GlueFinetune
+EXP = finetune.RteFinetune_10Epochs
 
 launch_params = gce.GceParams()
 
@@ -26,7 +27,7 @@ vast_params = vastai.create_supervisor_params(
                 "dph < 0.5",
                 "inet_down > 50",
                 "inet_up > 50",
-                # "gpu_ram >= 10",
+                "gpu_ram >= 10",
                 "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
             ]

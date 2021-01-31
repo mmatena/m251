@@ -115,15 +115,126 @@ def create_csv_table(filepath, round_digits=1):
     return result_utils.csv_to_str(rows)
 
 
+def latex_render_score_subscript(mean, stddev, round_digits=1, is_orig=False):
+    if mean is None:
+        return "---"
+
+    mean = round(mean, round_digits)
+    if stddev is None:
+        ret = f"{mean}"
+    else:
+        stddev = round(stddev, round_digits)
+        ret = f"{mean}_{{{stddev}}}"
+
+    if is_orig:
+        ret = f"\\mathit{{{ret}}}"
+
+    return f"${ret}$"
+
+
+def _index_to_epoch(item, filepath):
+    hp = item["hyperparams"]
+    donor_epoch = (hp["donor_ckpt_index"] + 1) / 2
+    if "10" in filepath:
+        target_epoch = float(hp["target_ckpt_index"] + 1)
+    else:
+        target_epoch = (hp["target_ckpt_index"] + 1) / 2
+    item = item.copy()
+    item["hyperparams"] = {
+        "target_epoch": target_epoch,
+        "donor_epoch": donor_epoch,
+    }
+    return item
+
+
+def create_latex_table(  # noqa: C901
+    filepath,
+    render_score_fn=latex_render_score_subscript,
+):
+    if not isinstance(filepath, (list, tuple)):
+        filepath = [filepath]
+
+    items = []
+    for fp in filepath:
+        its = result_utils.load_json(fp)
+        its = [_index_to_epoch(it, fp) for it in its]
+        its = [it for it in its if it["hyperparams"]["target_epoch"].is_integer()]
+        items.extend(its)
+
+    groups = collections.defaultdict(list)
+    for item in items:
+        hp = item["hyperparams"]
+        groups[(hp["donor_epoch"], hp["target_epoch"])].append(item)
+
+    original_scores = {}
+    for target_epoch in range(1, 11):
+        group_items = max(
+            [
+                group_items
+                for (_, te), group_items in groups.items()
+                if te == target_epoch
+            ],
+            key=len,
+        )
+        og_scores = np.array(
+            [get_single_score(item["original_score"]) for item in group_items]
+        )
+        mean = np.mean(og_scores)
+        stddev = np.std(og_scores) if len(group_items) > 1 else None
+        original_scores[target_epoch] = render_score_fn(mean, stddev)
+
+    merged_scores = {}
+    for k, group_items in groups.items():
+        scores = np.array(
+            [get_single_score(item["merged_score"]) for item in group_items]
+        )
+        og_mean = np.mean(
+            [get_single_score(item["original_score"]) for item in group_items]
+        )
+        mean = np.mean(scores)
+        stddev = np.std(scores) if len(group_items) > 1 else None
+        merged_scores[k] = render_score_fn(mean - og_mean, stddev)
+
+    rows = []
+    for row_idx in range(8):
+        donor_epoch = (row_idx + 1) / 2
+        rows.append(
+            [str(donor_epoch)]
+            + [
+                merged_scores[(donor_epoch, float(target_epoch))]
+                for target_epoch in range(1, 11)
+            ]
+        )
+
+    rows = [
+        R"\toprule",
+        [R"\textbf{Epoch}"] + [str(target_epoch) for target_epoch in range(1, 11)],
+        R"\midrule",
+        [R"\textit{Unmerged}"]
+        + [original_scores[target_epoch] for target_epoch in range(1, 11)],
+        R"\midrule",
+        *rows,
+        R"\bottomrule",
+    ]
+
+    return result_utils.table_to_latex(rows)
+
+
 if __name__ == "__main__":
     from m251.exp_groups.paper.ablations.ckpt_choice import fisher
     from m251.exp_groups.paper.ablations.ckpt_choice import merge
 
     ###########################################################################
-
-    filepath = MERGE_RTE_10_EPOCHS_JSON
-    t = create_csv_table(filepath)
+    filepath = [MERGE_JSON, MERGE_RTE_10_EPOCHS_JSON]
+    t = create_latex_table(filepath)
     print(t)
+
+    ###########################################################################
+    ###########################################################################
+
+    # filepath = MERGE_RTE_10_EPOCHS_JSON
+    # t = create_csv_table(filepath)
+    # print(t)
 
     ###########################################################################
 

@@ -11,7 +11,8 @@ from del8.executors.vastai import api_wrapper
 from m251.exp_groups.paper.nlp.intermediate_hf import merge_large
 
 
-EXP = merge_large.Merge_Pairs_Normalized_LastCkpt
+# EXP = merge_large.Merge_Pairs_Normalized_LastCkpt
+EXP = merge_large.FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars_EnsemblePairs
 
 
 execution_items = EXP.create_all_execution_items()
@@ -20,7 +21,7 @@ print(f"Number of execution items to process: {len(execution_items)}")
 vast_params = vastai.create_supervisor_params(
     EXP,
     execution_items=execution_items,
-    num_workers=4,
+    num_workers=1,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [
@@ -30,13 +31,13 @@ vast_params = vastai.create_supervisor_params(
                 "inet_down > 50",
                 "inet_up > 50",
                 "gpu_ram >= 10",
-                # "dlperf >= 16",
+                "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
             ]
         ),
         order_str="dlperf_usd-",
     ),
-    disk_gb=13,
+    disk_gb=32,
 )
 
 offers = api_wrapper.query_offers(vast_params)

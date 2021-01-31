@@ -94,6 +94,11 @@ class S2orc(tfds.core.GeneratorBasedBuilder):
             domain="cs",
             num_shards=5,
         ),
+        S2orcConfig(
+            s2orc_version="20200705v1",
+            domain="cs",
+            num_shards=20,
+        ),
     ]
 
     def _info(self):

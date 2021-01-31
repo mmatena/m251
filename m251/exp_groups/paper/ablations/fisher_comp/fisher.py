@@ -22,7 +22,7 @@ from m251.exp_groups.paper.paper_group import ParamsAbc
 
 from m251.exp_groups.paper.paper_group import PaperExpGroup
 
-from .finetune import GlueFinetune
+from .finetune import GlueFinetune, RteFinetune_10Epochs
 
 
 class FisherParamsAbc(ParamsAbc):
@@ -224,4 +224,38 @@ class VariationalFisherComputation(ExperimentAbc):
     ],
 )
 class DirectFisherComputation(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="f5957d3736d14b7b9265233b6793b80c",
+    group=PaperExpGroup,
+    params_cls=DirectFisherParams,
+    executable_cls=fisher_execs.fisher_computation,
+    varying_params=functools.partial(
+        create_varying_params,
+        train_exp=RteFinetune_10Epochs,
+        task_to_example_counts=TASK_TO_EXAMPLE_COUNTS,
+    ),
+    fixed_params={
+        "batch_size": 4,
+        "sequence_length": 64,
+    },
+    key_fields={
+        "trial_index",
+        #
+        "pretrained_model",
+        "task",
+        #
+        "num_examples",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        scopes.ArgNameBindingSpec("y_samples", None),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+    ],
+)
+class FisherComputation_Rte_10Epochs(ExperimentAbc):
     pass

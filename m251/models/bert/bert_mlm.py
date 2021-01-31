@@ -166,7 +166,7 @@ def load_pretrained_weights(model, pretrained_model, fetch_dir=None):
 ###############################################################################
 
 
-def mlm_average_nll(y_true, y_pred):
+def mlm_average_nll(y_true, y_pred, pad_token_id=0):
     # Negative log-liklihood average across predicted tokens. Lower values are better.
     logits = y_pred
     tokens_to_predict = y_true
@@ -176,6 +176,6 @@ def mlm_average_nll(y_true, y_pred):
     log_probs = tf.nn.log_softmax(logits)
     nlls = tf.gather(-log_probs, tokens_to_predict, batch_dims=2, axis=-1)
 
-    mask = tf.cast(tf.not_equal(tokens_to_predict, 0), tf.float32)
+    mask = tf.cast(tf.not_equal(tokens_to_predict, pad_token_id), tf.float32)
     mask /= tf.maximum(1.0, tf.reduce_sum(mask, axis=-1, keepdims=True))
     return tf.einsum("bs,bs->b", nlls, mask)

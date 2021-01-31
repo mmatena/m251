@@ -121,6 +121,95 @@ def create_csv_table(filepath, round_digits=1):
     return result_utils.csv_to_str(rows)
 
 
+def latex_render_score_subscript(mean, stddev, round_digits=1, is_orig=False):
+    if mean is None:
+        return "---"
+
+    mean = round(mean, round_digits)
+    if stddev is None:
+        ret = f"{mean}"
+    else:
+        stddev = round(stddev, round_digits)
+        ret = f"{mean}_{{{stddev}}}"
+
+    if is_orig:
+        ret = f"\\mathit{{{ret}}}"
+
+    return f"${ret}$"
+
+
+def create_latex_table(  # noqa: C901
+    filepath,
+    render_score_fn=latex_render_score_subscript,
+    l2_coeffs=(0.0, 1e-6, 3e-4, 0.01, 0.1),
+    coeff_to_pretty={
+        0.0: "0",
+        1e-6: "1e-6",
+        3e-4: "3e-4",
+        0.01: "1e-2",
+        0.1: "1e-1",
+    },
+):
+    items = result_utils.load_json(filepath)
+
+    row_groups = collections.defaultdict(list)
+    for item in items:
+        group_key = hashabledict(item["hyperparams"])
+        row_groups[group_key].append(item)
+
+    def get_original_score(target_coeff):
+        ret = {}
+        for k, v in row_groups.items():
+            if k["target_reg_strength"] != target_coeff:
+                continue
+            ret[k["donor_reg_strength"]] = v
+
+        if not ret:
+            return None, None
+
+        ret_items = max(ret.values(), key=len)
+        merged_scores = np.array(
+            [get_single_score(item["original_score"]) for item in ret_items]
+        )
+        mean = np.mean(merged_scores)
+        stddev = np.std(merged_scores) if len(ret_items) > 1 else None
+
+        return render_score_fn(mean, stddev)
+
+    rows = [len(l2_coeffs) * [""] for _ in l2_coeffs]
+
+    for col_idx, target_coeff in enumerate(l2_coeffs):
+        for row_idx, donor_coeff in enumerate(l2_coeffs):
+            key = hashabledict(
+                {
+                    "target_reg_strength": target_coeff,
+                    "donor_reg_strength": donor_coeff,
+                }
+            )
+            row_items = row_groups[key]
+            merged_scores = np.array(
+                [get_single_score(item["merged_score"]) for item in row_items]
+            )
+            mean = np.mean(merged_scores)
+            stddev = np.std(merged_scores) if len(row_items) > 1 else None
+            rows[row_idx][col_idx] = render_score_fn(mean, stddev)
+
+    for row, coeff in zip(rows, l2_coeffs):
+        row.insert(0, coeff_to_pretty[coeff])
+
+    rows = [
+        R"\toprule",
+        [""] + [coeff_to_pretty[t] for t in coeff_to_pretty],
+        R"\midrule",
+        ["Original"] + [get_original_score(t) for t in coeff_to_pretty],
+        R"\midrule",
+        *rows,
+        R"\bottomrule",
+    ]
+
+    return result_utils.table_to_latex(rows)
+
+
 if __name__ == "__main__":
     from m251.exp_groups.paper.ablations.reg_intermediate import fisher
     from m251.exp_groups.paper.ablations.reg_intermediate import merge
@@ -128,8 +217,15 @@ if __name__ == "__main__":
     ###########################################################################
 
     filepath = MERGE_JSON
-    t = create_csv_table(filepath)
+    t = create_latex_table(filepath)
     print(t)
+
+    ###########################################################################
+    ###########################################################################
+
+    # filepath = MERGE_JSON
+    # t = create_csv_table(filepath)
+    # print(t)
 
     ###########################################################################
 

@@ -4,6 +4,7 @@ import datetime
 
 from absl import logging
 import bayes_opt as bayes
+import numpy as np
 import tensorflow as tf
 
 from del8.core.utils import hdf5_util
@@ -12,7 +13,14 @@ from .. import fisher_abcs
 
 
 class DiagonalFisherComputer(fisher_abcs.FisherComputer):
-    def __init__(self, model, total_examples, class_chunk_size=4096, y_samples=None):
+    def __init__(
+        self,
+        model,
+        total_examples,
+        class_chunk_size=4096,
+        y_samples=None,
+        max_grad_value=None,
+    ):
         super().__init__()
 
         self.model = model
@@ -23,6 +31,7 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
             tf.Variable(tf.zeros(w.shape), trainable=False, name=f"fisher/{w.name}")
             for w in model.get_mergeable_variables()
         ]
+        self.max_grad_value = max_grad_value
 
     def train_step(self, data):
         if self.y_samples is None:
@@ -34,6 +43,7 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
     def train_step_exact_y(self, data):
         x, _ = data
         trainable_weights = self.model.get_mergeable_variables()
+        # print("@@@@@@@@@", len(trainable_weights))
 
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(trainable_weights)
@@ -70,6 +80,8 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
                     )
                     continue
                 # g.shape = [batch, num_classes, *var.shape]
+                if self.max_grad_value is not None:
+                    g = tf.minimum(g, self.max_grad_value)
                 update = tf.tensordot(probs_chunk, tf.square(g), [[0, 1], [0, 1]])
                 fraction_of_total = batch_size / float(self.total_examples)
                 fraction_of_total *= actual_chunk_size / num_classes
@@ -104,7 +116,10 @@ class DiagonalFisherComputer(fisher_abcs.FisherComputer):
                                 )
                             continue
                         # g.shape = [batch, *var.shape]
+                        if self.max_grad_value is not None:
+                            g = tf.minimum(g, self.max_grad_value)
                         update = tf.reduce_sum(tf.square(g), axis=0)
+
                         fraction_of_total = batch_size / tf.cast(
                             self.total_examples * self.y_samples, tf.float32
                         )
@@ -169,9 +184,18 @@ def merge_models(
                     diag = tf.maximum(diag, min_fisher)
                 mvar = model.get_mergeable_variables()[i]
 
+                # print(mvar.name)
+                # print(tf.reduce_sum(diag).numpy())
+                # print(np.median(diag.numpy()))
+
+                #
+                # diag = tf.minimum(1.0, diag)
+                #
+
                 tmp = weight * diag
                 lhs.append(tmp)
                 rhs.append(tmp * mvar)
+            # print('\n')
             rhs = tf.reduce_sum(rhs, axis=0)
             lhs = tf.reduce_sum(lhs, axis=0)
             var.assign(rhs / lhs)

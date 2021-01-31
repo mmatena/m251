@@ -122,6 +122,9 @@ class HfWrapper(tf.keras.Model):
     def params(self):
         return self.model.config
 
+    def freeze(self):
+        self.body.trainable = False
+
     def call(self, inputs, training=None, **kwargs):
         del kwargs
         input_ids, token_type_ids = inputs

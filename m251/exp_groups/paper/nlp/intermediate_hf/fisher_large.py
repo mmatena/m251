@@ -145,3 +145,41 @@ def create_varying_params_last_ckpt(
 )
 class FisherComputation_RobertLargeMnli_Rte_LastCkpt(ExperimentAbc):
     pass
+
+
+@experiment.experiment(
+    uuid="77f33ac9645f44cb8c38bf9047bd18d0",
+    group=PaperExpGroup,
+    params_cls=FisherParams,
+    executable_cls=fisher_execs.fisher_computation,
+    varying_params=functools.partial(
+        create_varying_params_last_ckpt,
+        train_exp=GlueFinetune_RobertLargeMnli_Rte,
+        max_examples=MAX_EXAMPLES,
+    ),
+    fixed_params={
+        "batch_size": 1,
+        "sequence_length": 64,
+    },
+    key_fields={
+        "finetuned_ckpt_uuid",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        scopes.ArgNameBindingSpec("y_samples", None),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 3),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("glue_label_map_overrides", defs.LABEL_MAP_OVERRIDES),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+        #
+        scopes.ArgNameBindingSpec("all_variables_mergeable", True),
+    ],
+)
+class FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars(ExperimentAbc):
+    pass

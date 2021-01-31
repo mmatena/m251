@@ -36,6 +36,7 @@ from m251.exp_groups.paper.results import utils as result_utils
 from . import defs
 
 from .fisher_large import FisherComputation_RobertLargeMnli_Rte_LastCkpt
+from .fisher_large import FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars
 from ..intermediate.fisher import FisherComputation_LastCkpt
 
 
@@ -54,8 +55,6 @@ class MergeParams(ParamsAbc):
     def __init__(
         self,
         #
-        trial_index,
-        #
         models_to_merge,
         num_weightings,
         #
@@ -66,6 +65,8 @@ class MergeParams(ParamsAbc):
         pretrained_model,
         #
         normalize_fishers,
+        #
+        trial_index=None,
     ):
         pass
 
@@ -107,7 +108,7 @@ class MergeParams(ParamsAbc):
 ###############################################################################
 
 
-def _finetuned_to_mtm(run_params, fishers, additional_model_bindings):
+def _finetuned_to_mtm(run_params, fishers, additional_model_bindings=()):
     return ModelToMerge(
         task=run_params.task,
         train_run_uuid=run_params.finetuned_run_uuid,
@@ -251,4 +252,81 @@ def create_varying_params(
     ],
 )
 class Merge_Pairs_Normalized_LastCkpt(ExperimentAbc):
+    pass
+
+
+###############################################################################
+
+
+def create_varying_params_ensembled(
+    exp,
+    fisher_exp,
+):
+    with exp.get_storage() as storage:
+        exps_data = storage.retrieve_storage_data(experiment_uuid=[fisher_exp.uuid])
+
+    run_params, fishers = _get_infos_for_task(exps_data, [fisher_exp])
+
+    varying_params = []
+    for target_param in run_params:
+        for donor_param in run_params:
+            if target_param is donor_param:
+                continue
+            mtm1 = _finetuned_to_mtm(target_param, fishers)
+            mtm2 = _finetuned_to_mtm(donor_param, fishers)
+            varying_params.append({"models_to_merge": [mtm1, mtm2]})
+
+    return varying_params
+
+
+@experiment.experiment(
+    uuid="318829c50ce34d2c85701a756d75b1b3",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params_ensembled,
+        fisher_exp=FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars,
+    ),
+    fixed_params={
+        "pretrained_model": "roberta-large-mnli",
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 128,
+        #
+        "normalize_fishers": True,
+    },
+    key_fields={
+        "models_to_merge",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("glue_label_map_overrides", defs.LABEL_MAP_OVERRIDES),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+        #
+        scopes.ArgNameBindingSpec("all_variables_mergeable", True),
+    ],
+)
+class FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars_EnsemblePairs(
+    ExperimentAbc
+):
     pass
