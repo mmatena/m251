@@ -25,7 +25,9 @@ from m251.exp_groups.paper.nlp.dom_adapt_hf import fisher3
 # EXP = fisher3.Fisher_PretrainMore
 # EXP = fisher3.Fisher_PretrainMore_REAL
 # EXP = fisher3.Fisher_PretrainFromDapt32768
-EXP = fisher3.Fisher_Pretrain32768NoReg
+# EXP = fisher3.Fisher_Pretrain32768NoReg
+
+EXP = fisher2.FisherComputation_ROBERTA_TargetTasks_AllCkpts
 
 
 execution_items = EXP.create_all_execution_items()
@@ -34,24 +36,27 @@ print(f"Number of execution items to process: {len(execution_items)}")
 vast_params = vastai.create_supervisor_params(
     EXP,
     execution_items=execution_items,
-    num_workers=1,
+    num_workers=20,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [
                 "reliability > 0.95",
                 "num_gpus=1",
-                "dph < 0.5",
-                "inet_down > 200",
+                "dph < 0.505",
+                "inet_down > 50",
                 "inet_up > 50",
-                "gpu_ram >= 10",
-                "dlperf >= 16",
+                # "gpu_ram >= 20",
+                # "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
+                "cuda_vers <= 11.1",
             ]
         ),
         order_str="dlperf_usd-",
     ),
-    disk_gb=24,
+    disk_gb=16,
+    image="tensorflow/tensorflow:2.4.0-gpu",
 )
+
 
 offers = api_wrapper.query_offers(vast_params)
 print(f"Number of acceptable offers: {len(offers)}")

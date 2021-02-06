@@ -197,6 +197,44 @@ class FisherComputation_ROBERTA_TargetTasks_LastCkpt_AllVars(ExperimentAbc):
 
 
 @experiment.experiment(
+    uuid="ac02591a39bb4dd4bc07ce2c0492a103",
+    group=PaperExpGroup,
+    params_cls=TargetTaskFisherParams,
+    executable_cls=fisher_execs.fisher_computation,
+    varying_params=functools.partial(
+        create_varying_params,
+        train_exp=Finetune_ROBERTA_LowResource,
+        task_to_example_count=TRAIN_EXAMPLES,
+        min_ckpt_index=0,
+    ),
+    fixed_params={
+        "batch_size": 2,
+        "sequence_length": 256,
+        #
+        "y_samples": None,
+    },
+    key_fields={
+        "finetuned_ckpt_uuid",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        scopes.ArgNameBindingSpec("y_samples", None),
+        #
+        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 4),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", target_tasks.finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+    ],
+)
+class FisherComputation_ROBERTA_TargetTasks_AllCkpts(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
     uuid="142627f5881f44a588738fec0b532d04",
     group=PaperExpGroup,
     params_cls=TargetTaskFisherParams,

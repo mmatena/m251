@@ -77,32 +77,55 @@ class MlmFisherParams(ParamsAbc):
 
 
 @experiment.with_experiment_storages()
-def create_varying_params(exp, train_exp, fisher_examples):
+def create_varying_params(
+    exp,
+    train_exp,
+    fisher_examples,
+    all_ckpts=False,
+    pretrained_examples=None,
+    pretrained_reg_strength=None,
+):
     varying_params = []
     run_ids = train_exp.retrieve_run_uuids(RunState.FINISHED)
 
     for run_id in run_ids:
         run_params = train_exp.retrieve_run_params(run_id)
 
+        if (
+            pretrained_examples is not None
+            and run_params.num_examples != pretrained_examples
+        ):
+            continue
+        if (
+            pretrained_reg_strength is not None
+            and run_params.reg_strength != pretrained_reg_strength
+        ):
+            continue
+
         checkpoints_summary = train_exp.retrieve_checkpoints_summary(run_id)
 
-        checkpoint_uuid = checkpoints_summary.checkpoint_uuids[-1]
-        varying_params.append(
-            {
-                "trial_index": 0,
-                #
-                "task": run_params.task,
-                "pretrained_model": run_params.pretrained_model,
-                #
-                "checkpoint": checkpoint_uuid,
-                "pretrained_run_uuid": run_id,
-                #
-                "num_examples": fisher_examples,
-                #
-                "pretrained_examples": run_params.num_examples,
-                "pretrained_reg_strength": run_params.reg_strength,
-            }
-        )
+        if all_ckpts:
+            ckpts = checkpoints_summary.checkpoint_uuids
+        else:
+            ckpts = checkpoints_summary.checkpoint_uuids[-1:]
+
+        for checkpoint_uuid in ckpts:
+            varying_params.append(
+                {
+                    "trial_index": 0,
+                    #
+                    "task": run_params.task,
+                    "pretrained_model": run_params.pretrained_model,
+                    #
+                    "checkpoint": checkpoint_uuid,
+                    "pretrained_run_uuid": run_id,
+                    #
+                    "num_examples": fisher_examples,
+                    #
+                    "pretrained_examples": run_params.num_examples,
+                    "pretrained_reg_strength": run_params.reg_strength,
+                }
+            )
 
     return varying_params
 

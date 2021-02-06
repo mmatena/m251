@@ -1,52 +1,49 @@
 """
 export PYTHONPATH=$PYTHONPATH:~/Desktop/projects/m251:~/Desktop/projects/del8
 
-python3 m251/exp_groups/paper/nlp/dom_adapt_hf2/launch/launch_fisher.py
+python3 m251/exp_groups/paper/ablations/reg_intermediate2/launch/launch_merge.py
 
 """
 from del8.executors.gce import gce
 from del8.executors.vastai import vastai
 from del8.executors.vastai import api_wrapper
 
-from m251.exp_groups.paper.nlp.dom_adapt_hf2 import fisher
+from m251.exp_groups.paper.ablations.reg_intermediate2 import merge
 
 
-# EXP = fisher.Fisher_PretrainCs_16384
-EXP = fisher.Fisher_PretrainBioMed_16384
+EXP = merge.Merge
 
 
 execution_items = EXP.create_all_execution_items()
 print(f"Number of execution items to process: {len(execution_items)}")
 
+launch_params = gce.GceParams()
+
 vast_params = vastai.create_supervisor_params(
     EXP,
-    execution_items=execution_items,
-    num_workers=5,
+    num_workers=16,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [
                 "reliability > 0.95",
                 "num_gpus=1",
-                "dph < 0.505",
-                "inet_down > 150",
+                "dph < 0.5",
+                "inet_down > 50",
                 "inet_up > 50",
-                # "gpu_ram >= 20",
-                # "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
                 "cuda_vers <= 11.1",
             ]
         ),
         order_str="dlperf_usd-",
     ),
-    disk_gb=32,
-    image="tensorflow/tensorflow:2.4.0-gpu",
+    disk_gb=16,
 )
 
 offers = api_wrapper.query_offers(vast_params)
 print(f"Number of acceptable offers: {len(offers)}")
 
-launch_params = gce.GceParams()
 node, deploy = gce.launch(execution_items, vast_params, launch_params)
+
 
 # #
 # #
@@ -65,5 +62,3 @@ node, deploy = gce.launch(execution_items, vast_params, launch_params)
 # print(f'Number of execution items to process: {len(execution_items)}')
 
 # entrypoint.worker_run(**execution_items[0].worker_run_kwargs)
-
-###############################################################################

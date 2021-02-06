@@ -12,8 +12,10 @@ from m251.exp_groups.paper.nlp.dom_adapt_hf2 import merge
 
 
 # EXP = merge.Merge_ROBERTA_LastCkpt_TestSet_PretrainCs
-EXP = merge.Merge_ROBERTA_LastCkpt_TestSet_PretrainBioMed
+# EXP = merge.Merge_ROBERTA_LastCkpt_TestSet_PretrainBioMed
 # EXP = merge.Merge_FinetunedCs327681e6_LastCkpt_TestSet_DAPT131072
+# EXP = merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainCs
+EXP = merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainBioMed
 
 
 execution_items = EXP.create_all_execution_items()
@@ -22,13 +24,13 @@ print(f"Number of execution items to process: {len(execution_items)}")
 vast_params = vastai.create_supervisor_params(
     EXP,
     execution_items=execution_items,
-    num_workers=12,
+    num_workers=7,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [
-                "reliability > 0.98",
+                "reliability > 0.95",
                 "num_gpus=1",
-                "dph < 0.510",
+                "dph < 0.5",
                 "inet_down > 50",
                 "inet_up > 50",
                 # "gpu_ram >= 20",

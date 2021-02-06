@@ -59,6 +59,7 @@ def create_json(merge_exp):
             "task": target_mtm.task,
             "pretrained_examples": params.pretrained_examples,
             "pretrained_reg_strength": params.pretrained_reg_strength,
+            "train_run_uuid": params.models_to_merge[0].train_run_uuid,
         }
 
         hyperparams["donor_fisher"] = donor_mtm.fisher_run_uuid
@@ -86,6 +87,24 @@ def create_csv_table(filepath, round_digits=1):
         group_key = hashabledict(item["hyperparams"])
         row_groups[group_key].append(item)
 
+    row_groups2 = collections.defaultdict(list)
+    for hp, row_items in row_groups.items():
+        best_og = max(
+            row_items, key=lambda item: get_single_score(item["original_score"])
+        )
+        best_merged = max(
+            row_items, key=lambda item: get_single_score(item["merged_score"])
+        )
+        hp = dict(hp)
+        del hp["train_run_uuid"]
+        group_key = hashabledict(hp)
+        row_groups2[group_key].append(
+            {
+                "original_score": best_og["original_score"],
+                "merged_score": best_merged["merged_score"],
+            }
+        )
+
     header = [
         "task",
         "mlm train ex",
@@ -101,14 +120,13 @@ def create_csv_table(filepath, round_digits=1):
         "num trials",
     ]
     body = []
-    for hp, row_items in row_groups.items():
+    for hp, row_items in row_groups2.items():
         og_scores = np.array(
             [get_single_score(item["original_score"]) for item in row_items]
         )
         merged_scores = np.array(
             [get_single_score(item["merged_score"]) for item in row_items]
         )
-
         row = [
             hp["task"],
             hp["pretrained_examples"],
@@ -142,8 +160,10 @@ if __name__ == "__main__":
     ###########################################################################
 
     # merge_exp = merge.Merge_ROBERTA_LastCkpt_TestSet_PretrainCs
-    merge_exp = merge.Merge_ROBERTA_LastCkpt_TestSet_PretrainBioMed
+    # merge_exp = merge.Merge_ROBERTA_LastCkpt_TestSet_PretrainBioMed
     # merge_exp = merge.Merge_FinetunedCs327681e6_LastCkpt_TestSet_DAPT131072
+    # merge_exp = merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainCs
+    merge_exp = merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainBioMed
 
     summary = create_json(merge_exp)
     filepath = TEMP_JSON
