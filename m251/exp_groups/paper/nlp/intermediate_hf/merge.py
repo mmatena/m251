@@ -38,6 +38,8 @@ from .fisher import (
     FisherComputation_BertBase_LowResource_LastCkpt,
     FisherComputation_BertBaseFromMnliCkpt_LastCkpt,
     FisherComputation_BertBase_Squad2,
+    FisherComputation_BertBase_RteHoldout_LastCkpt,
+    FisherComputation_BertBase_RteHoldout_LastCkpt2,
 )
 
 
@@ -146,6 +148,7 @@ def create_varying_params(
     exp,
     fisher_exps,
     no_high_resource_pairs=False,
+    target_tasks=None,
 ):
     with exp.get_storage() as storage:
         exps_data = storage.retrieve_storage_data(
@@ -171,6 +174,13 @@ def create_varying_params(
         ):
             continue
 
+        if (
+            target_tasks is not None
+            and p1.task not in target_tasks
+            and p2.task not in target_tasks
+        ):
+            continue
+
         trial_index = 0
         if p1.task not in defs.HIGH_RESOURCE_TASKS:
             trial_index = p1.trial_index
@@ -180,18 +190,20 @@ def create_varying_params(
         mtm1 = _to_mtm(p1, fishers)
         mtm2 = _to_mtm(p2, fishers)
 
-        varying_params.append(
-            {
-                "trial_index": trial_index,
-                "models_to_merge": [mtm1, mtm2],
-            }
-        )
-        varying_params.append(
-            {
-                "trial_index": trial_index,
-                "models_to_merge": [mtm2, mtm1],
-            }
-        )
+        if target_tasks is None or p1.task in target_tasks:
+            varying_params.append(
+                {
+                    "trial_index": trial_index,
+                    "models_to_merge": [mtm1, mtm2],
+                }
+            )
+        if target_tasks is None or p2.task in target_tasks:
+            varying_params.append(
+                {
+                    "trial_index": trial_index,
+                    "models_to_merge": [mtm2, mtm1],
+                }
+            )
 
     # for p in varying_params:
     #     print(p['trial_index'], p['models_to_merge'][0].task, p['models_to_merge'][1].task)
@@ -589,4 +601,169 @@ class Merge_BertBase_HighResource_SquadDonor_4096(ExperimentAbc):
     ],
 )
 class Merge_BertBaseFromMnli_SquadDonor_1024(ExperimentAbc):
+    pass
+
+
+###############################################################################
+
+
+@experiment.experiment(
+    uuid="18ac4d9709894b4780e55acee37c8956",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_tasks={"rte"},
+        fisher_exps=[
+            FisherComputation_BertBase_HighResource,
+            FisherComputation_BertBase_RteHoldout_LastCkpt,
+        ],
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 277,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "train"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+    ],
+)
+class Merge_BertBase_RteHoldout_LastCkpt(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="469ba2a1328d4780b45111465298a625",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_tasks={"rte"},
+        fisher_exps=[
+            FisherComputation_BertBase_HighResource,
+            FisherComputation_BertBase_RteHoldout_LastCkpt2,
+        ],
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 277,
+        "sequence_length": 64,
+        "batch_size": 277,
+        #
+        "normalize_fishers": True,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "train"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+    ],
+)
+class Merge_BertBase_RteHoldout_LastCkpt2(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="a26ab696bf434a5fb5212d4eadb07a2a",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_tasks={"rte"},
+        fisher_exps=[
+            FisherComputation_BertBase_HighResource,
+            FisherComputation_BertBase_RteHoldout_LastCkpt2,
+        ],
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 3,
+        #
+        "validation_examples": 277,
+        "sequence_length": 64,
+        "batch_size": 277,
+        #
+        "normalize_fishers": True,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+    ],
+)
+class Merge_BertBase_RteHoldout_LastCkpt50(ExperimentAbc):
     pass

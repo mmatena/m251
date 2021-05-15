@@ -3,7 +3,12 @@ import bert
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from transformers.modeling_tf_roberta import TFRobertaClassificationHead
+try:
+    from transformers.modeling_tf_roberta import TFRobertaClassificationHead
+except ModuleNotFoundError:
+    from transformers.models.roberta.modeling_tf_roberta import (
+        TFRobertaClassificationHead,
+    )
 
 from m251.data.processing.constants import NUM_GLUE_LABELS
 from m251.models import model_abcs

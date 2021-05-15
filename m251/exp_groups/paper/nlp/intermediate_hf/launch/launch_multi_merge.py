@@ -1,22 +1,18 @@
 """
 export PYTHONPATH=$PYTHONPATH:~/Desktop/projects/m251:~/Desktop/projects/del8
 
-python3 m251/exp_groups/paper/nlp/intermediate_hf/launch/launch_fisher.py
+python3 m251/exp_groups/paper/nlp/intermediate_hf/launch/launch_multi_merge.py
 
 """
 from del8.executors.gce import gce
 from del8.executors.vastai import vastai
 from del8.executors.vastai import api_wrapper
 
-from m251.exp_groups.paper.nlp.intermediate_hf import fisher
+from m251.exp_groups.paper.nlp.intermediate_hf import multi_merge
 
 
-# EXP = fisher.FisherComputation_BertBase_HighResource
-# EXP = fisher.FisherComputation_BertBase_LowResource_LastCkpt
-# EXP = fisher.FisherComputation_BertBaseFromMnliCkpt_LastCkpt
-# EXP = fisher.FisherComputation_BertBase_Squad2
-# EXP = fisher.FisherComputation_BertBase_RteHoldout_LastCkpt
-EXP = fisher.FisherComputation_BertBase_RteHoldout_LastCkpt2
+# EXP = multi_merge.Merge_BertBase_Rte_MnliQnli
+EXP = multi_merge.Merge_BertBase_Rte_MnliRte
 
 
 execution_items = EXP.create_all_execution_items()
@@ -25,7 +21,7 @@ print(f"Number of execution items to process: {len(execution_items)}")
 vast_params = vastai.create_supervisor_params(
     EXP,
     execution_items=execution_items,
-    num_workers=5,
+    num_workers=20,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [
@@ -34,7 +30,7 @@ vast_params = vastai.create_supervisor_params(
                 "dph < 2.0",
                 "inet_down > 50",
                 "inet_up > 50",
-                "dlperf >= 16",
+                # "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
             ]
         ),

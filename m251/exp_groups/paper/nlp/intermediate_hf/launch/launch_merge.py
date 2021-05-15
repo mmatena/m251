@@ -16,7 +16,10 @@ from m251.exp_groups.paper.nlp.intermediate_hf import merge
 # EXP = merge.Merge_BertBaseFromMnli_SquadDonor_4096
 # EXP = merge.Merge_BertBase_SquadDonor_4096
 # EXP = merge.Merge_BertBaseFromMnli_SquadDonor_1024
-EXP = merge.Merge_BertBase_HighResource_SquadDonor_4096
+# EXP = merge.Merge_BertBase_HighResource_SquadDonor_4096
+# EXP = merge.Merge_BertBase_RteHoldout_LastCkpt
+# EXP = merge.Merge_BertBase_RteHoldout_LastCkpt2
+EXP = merge.Merge_BertBase_RteHoldout_LastCkpt50
 
 
 execution_items = EXP.create_all_execution_items()
@@ -25,23 +28,24 @@ print(f"Number of execution items to process: {len(execution_items)}")
 vast_params = vastai.create_supervisor_params(
     EXP,
     execution_items=execution_items,
-    num_workers=2,
+    num_workers=10,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [
                 "reliability > 0.95",
                 "num_gpus=1",
-                "dph < 0.5",
+                "dph < 2.0",
                 "inet_down > 50",
                 "inet_up > 50",
-                "gpu_ram >= 10",
-                # "dlperf >= 16",
+                # "gpu_ram >= 10",
+                "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
             ]
         ),
         order_str="dlperf_usd-",
     ),
     disk_gb=16,
+    image="tensorflow/tensorflow:2.4.0-gpu",
 )
 
 offers = api_wrapper.query_offers(vast_params)

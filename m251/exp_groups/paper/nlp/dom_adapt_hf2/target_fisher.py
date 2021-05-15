@@ -29,7 +29,7 @@ from m251.exp_groups.paper.paper_group import ParamsAbc
 
 from m251.exp_groups.paper.paper_group import PaperExpGroup
 
-from .finetune import Finetune_Cs
+from .finetune import Finetune_Cs, Finetune_BioMed
 
 
 TRAIN_EXAMPLES = target_tasks.TRAIN_EXAMPLES
@@ -89,14 +89,18 @@ class TargetTaskFisherParams(ParamsAbc):
 
 @experiment.with_experiment_storages()
 def create_varying_params(
-    exp, train_exp, task_to_example_count, pretrained_examples, pretrained_reg_strength
+    exp,
+    train_exp,
+    task_to_example_count,
+    pretrained_examples,
+    pretrained_reg_strength,
+    all_ckpts=False,
 ):
     varying_params = []
     run_ids = train_exp.retrieve_run_uuids(RunState.FINISHED)
 
     for run_id in run_ids:
         run_params = train_exp.retrieve_run_params(run_id)
-
         if run_params.pretrained_examples != pretrained_examples:
             continue
         elif run_params.pretrained_reg_strength != pretrained_reg_strength:
@@ -104,25 +108,29 @@ def create_varying_params(
 
         checkpoints_summary = train_exp.retrieve_checkpoints_summary(run_id)
 
-        ckpt_id = checkpoints_summary.checkpoint_uuids[-1]
+        if all_ckpts:
+            ckpt_ids = checkpoints_summary.checkpoint_uuids
+        else:
+            ckpt_ids = checkpoints_summary.checkpoint_uuids[-1:]
 
-        varying_params.append(
-            {
-                "trial_index": run_params.trial_index,
-                "checkpoint_index": len(checkpoints_summary.checkpoint_uuids) - 1,
-                #
-                "task": run_params.task,
-                "pretrained_model": run_params.pretrained_model,
-                #
-                "finetuned_run_uuid": run_id,
-                "finetuned_ckpt_uuid": ckpt_id,
-                #
-                "num_examples": task_to_example_count[run_params.task],
-                #
-                "pretrained_examples": run_params.pretrained_examples,
-                "pretrained_reg_strength": run_params.pretrained_reg_strength,
-            }
-        )
+        for ckpt_id in ckpt_ids:
+            varying_params.append(
+                {
+                    "trial_index": run_params.trial_index,
+                    "checkpoint_index": len(checkpoints_summary.checkpoint_uuids) - 1,
+                    #
+                    "task": run_params.task,
+                    "pretrained_model": run_params.pretrained_model,
+                    #
+                    "finetuned_run_uuid": run_id,
+                    "finetuned_ckpt_uuid": ckpt_id,
+                    #
+                    "num_examples": task_to_example_count[run_params.task],
+                    #
+                    "pretrained_examples": run_params.pretrained_examples,
+                    "pretrained_reg_strength": run_params.pretrained_reg_strength,
+                }
+            )
 
     return varying_params
 
@@ -163,4 +171,84 @@ def create_varying_params(
     ],
 )
 class Fisher_Cs_32768_1e6(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="9942a0e5418b44d6a51232bf15491141",
+    group=PaperExpGroup,
+    params_cls=TargetTaskFisherParams,
+    executable_cls=fisher_execs.fisher_computation,
+    varying_params=functools.partial(
+        create_varying_params,
+        train_exp=Finetune_Cs,
+        task_to_example_count=TRAIN_EXAMPLES,
+        pretrained_examples=1048576,
+        pretrained_reg_strength=0.0,
+        all_ckpts=True,
+    ),
+    fixed_params={
+        "batch_size": 2,
+        "sequence_length": 256,
+        #
+        "y_samples": None,
+    },
+    key_fields={
+        "finetuned_ckpt_uuid",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        scopes.ArgNameBindingSpec("y_samples", None),
+        #
+        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 4),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", target_tasks.finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+    ],
+)
+class Fisher_DAPT_CsFt_AllCkpts(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="b4d28b23c9824b99afb9b3cb20f18027",
+    group=PaperExpGroup,
+    params_cls=TargetTaskFisherParams,
+    executable_cls=fisher_execs.fisher_computation,
+    varying_params=functools.partial(
+        create_varying_params,
+        train_exp=Finetune_BioMed,
+        task_to_example_count=TRAIN_EXAMPLES,
+        pretrained_examples=1048576,
+        pretrained_reg_strength=0.0,
+        all_ckpts=True,
+    ),
+    fixed_params={
+        "batch_size": 2,
+        "sequence_length": 256,
+        #
+        "y_samples": None,
+    },
+    key_fields={
+        "finetuned_ckpt_uuid",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        scopes.ArgNameBindingSpec("y_samples", None),
+        #
+        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 4),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", target_tasks.finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+    ],
+)
+class Fisher_DAPT_BioMedFt_AllCkpts(ExperimentAbc):
     pass

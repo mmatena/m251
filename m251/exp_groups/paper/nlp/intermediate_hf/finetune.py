@@ -47,6 +47,8 @@ class FinetuneParams(ParamsAbc):
         #
         num_training_examples,
         num_ckpt_saves,
+        #
+        tfds_skip=None,
     ):
         pass
 
@@ -72,6 +74,8 @@ class FinetuneParams(ParamsAbc):
             #
             "hf_back_compat": False,
             "glue_label_map_overrides": defs.LABEL_MAP_OVERRIDES,
+            #
+            "tfds_skip": self.tfds_skip,
         }
 
 
@@ -157,4 +161,34 @@ class GlueFinetune_BertBase(ExperimentAbc):
     **COMMON_KWARGS,
 )
 class GlueFinetune_BertBaseFromMnliCkpt(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="fb833fd70f87440bbff69f72c318f5c5",
+    varying_params=[
+        {
+            **get_varying_param("rte", i, "bert-base-uncased"),
+            "tfds_skip": 277,
+        }
+        for i in range(defs.LOW_RESOURCE_TRIALS)
+    ],
+    **COMMON_KWARGS,
+)
+class GlueFinetune_BertBase_RteHoldout(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="aa961643cf6f4810ac9cf94aa3758231",
+    varying_params=[
+        {
+            **get_varying_param("rte", i, "bert-base-uncased"),
+            "tfds_skip": 277,
+        }
+        for i in range(defs.LOW_RESOURCE_TRIALS)
+    ],
+    **COMMON_KWARGS,
+)
+class GlueFinetune_BertBase_RteHoldout2(ExperimentAbc):
     pass

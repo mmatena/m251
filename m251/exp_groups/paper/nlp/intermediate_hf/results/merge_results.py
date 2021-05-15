@@ -127,6 +127,18 @@ def create_csv_table(filepath, round_digits=1, group_by_target_ckpt=False):
         merged_scores = np.array(
             [get_single_score(item["merged_score"]) for item in row_items]
         )
+        #
+        #
+        #
+        #
+        #
+        # og_scores = og_scores[merged_scores < 97.0]
+        # merged_scores = merged_scores[merged_scores < 97.0]
+        # #
+        #
+        #
+        #
+        #
         row = [
             hp["target_task"],
             hp["donor_task"],
@@ -304,20 +316,35 @@ if __name__ == "__main__":
     ###########################################################################
     ###########################################################################
 
-    merge_exp = (
-        merge_large.FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars_EnsemblePairs
-    )
+    merge_exp = merge.Merge_BertBase_RteHoldout_LastCkpt50
     summary = create_json(merge_exp)
     # s = json.dumps(summary, indent=2)
     # print(s)
 
-    filepath = MERGE_MNLI_RTE_LARGE_ENSEMBLE_JSON
+    filepath = "/tmp/kfgsdkfdg.json"
     with open(filepath, "w") as f:
         json.dump(summary, f, indent=2)
 
     # t = create_csv_table(filepath, group_by_target_ckpt=True)
-    t = create_csv_table(filepath, group_by_target_ckpt=False)
+    t = create_csv_table(filepath)
     print(t)
+
+    ###########################################################################
+
+    # merge_exp = (
+    #     merge_large.FisherComputation_RobertLargeMnli_Rte_LastCkpt_AllVars_EnsemblePairs
+    # )
+    # summary = create_json(merge_exp)
+    # # s = json.dumps(summary, indent=2)
+    # # print(s)
+
+    # filepath = MERGE_MNLI_RTE_LARGE_ENSEMBLE_JSON
+    # with open(filepath, "w") as f:
+    #     json.dump(summary, f, indent=2)
+
+    # # t = create_csv_table(filepath, group_by_target_ckpt=True)
+    # t = create_csv_table(filepath, group_by_target_ckpt=False)
+    # print(t)
 
     ###########################################################################
 

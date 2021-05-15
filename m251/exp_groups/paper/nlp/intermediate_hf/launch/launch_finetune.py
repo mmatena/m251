@@ -12,7 +12,9 @@ from m251.exp_groups.paper.nlp.intermediate_hf import finetune
 
 
 # EXP = finetune.GlueFinetune_BertBase
-EXP = finetune.GlueFinetune_BertBaseFromMnliCkpt
+# EXP = finetune.GlueFinetune_BertBaseFromMnliCkpt
+# EXP = finetune.GlueFinetune_BertBase_RteHoldout
+EXP = finetune.GlueFinetune_BertBase_RteHoldout2
 
 
 execution_items = EXP.create_all_execution_items()
@@ -27,11 +29,10 @@ vast_params = vastai.create_supervisor_params(
             [
                 "reliability > 0.95",
                 "num_gpus=1",
-                "dph < 0.5",
+                "dph < 2.0",
                 "inet_down > 50",
                 "inet_up > 50",
-                "gpu_ram >= 10",
-                # "dlperf >= 16",
+                "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
             ]
         ),
@@ -43,8 +44,8 @@ vast_params = vastai.create_supervisor_params(
 offers = api_wrapper.query_offers(vast_params)
 print(f"Number of acceptable offers: {len(offers)}")
 
-launch_params = gce.GceParams()
-node, deploy = gce.launch(execution_items, vast_params, launch_params)
+# launch_params = gce.GceParams()
+# node, deploy = gce.launch(execution_items, vast_params, launch_params)
 
 
 # #

@@ -163,7 +163,9 @@ if __name__ == "__main__":
     # merge_exp = merge.Merge_ROBERTA_LastCkpt_TestSet_PretrainBioMed
     # merge_exp = merge.Merge_FinetunedCs327681e6_LastCkpt_TestSet_DAPT131072
     # merge_exp = merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainCs
-    merge_exp = merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainBioMed
+    # merge_exp = merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainBioMed
+    # merge_exp = merge.Merge_DAPT_AllCkpts_TestSet_PretrainCs
+    merge_exp = merge.Merge_DAPT_AllCkpts_TestSet_PretrainBioMed
 
     summary = create_json(merge_exp)
     filepath = TEMP_JSON
