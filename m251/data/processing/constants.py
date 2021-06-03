@@ -24,6 +24,9 @@ NUM_GLUE_LABELS = {
     #
     "boolq": 2,
     #
+    # NOTE: FAKE
+    "squad2": 2,
+    #
     **target_tasks.NUM_CLASSES,
 }
 

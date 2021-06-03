@@ -110,6 +110,7 @@ class BertGlueClassifier(tf.keras.Model, model_abcs.MergeableModel):
 
         return {
             f"task_{i}": head(out, training=training)
+            # f"task_{i}": tf.squeeze(head(out, training=training))
             for i, (out, head) in enumerate(zip(outs, self.heads))
         }
 
@@ -263,7 +264,9 @@ def get_untrained_bert(
 def _make_multitask_loss(loss, num_tasks):
     def multitask_loss(y_true, y_pred):
         per_task_losses = [
-            loss(y_true[f"task_{i}"], y_pred[f"task_{i}"]) for i in range(num_tasks)
+            # loss(y_true[f"task_{i}"], y_pred[f"task_{i}"]) for i in range(num_tasks)
+            loss(tf.squeeze(y_true[f"task_{i}"]), tf.squeeze(y_pred[f"task_{i}"]))
+            for i in range(num_tasks)
         ]
         return tf.reduce_mean(per_task_losses)
 

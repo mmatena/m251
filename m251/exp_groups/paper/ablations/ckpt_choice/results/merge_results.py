@@ -225,16 +225,22 @@ if __name__ == "__main__":
     from m251.exp_groups.paper.ablations.ckpt_choice import merge
 
     ###########################################################################
-    filepath = [MERGE_JSON, MERGE_RTE_10_EPOCHS_JSON]
-    t = create_latex_table(filepath)
-    print(t)
-
-    ###########################################################################
-    ###########################################################################
-
-    # filepath = MERGE_RTE_10_EPOCHS_JSON
-    # t = create_csv_table(filepath)
+    # filepath = [MERGE_JSON, MERGE_RTE_10_EPOCHS_JSON]
+    # t = create_latex_table(filepath)
     # print(t)
+
+    ###########################################################################
+    ###########################################################################
+    merge_exp = merge.Merge
+    # merge_exp = merge.DummyMerge
+    summary = create_json(merge_exp)
+
+    filepath = "/tmp/kfgsdkfdg.json"
+    with open(filepath, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    t = create_csv_table(filepath)
+    print(t)
 
     ###########################################################################
 

@@ -66,6 +66,8 @@ def dummy_fisher_model_merger(
 
             merged.compile(**compile_kwargs)
 
+            logging.info("DUMMY MERGING!!!")
+
             yield merged
 
 

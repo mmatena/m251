@@ -17,6 +17,7 @@ from m251.data.domains import target_tasks
 from m251.data.glue import glue
 
 from m251.fisher.diagonal import diagonal_execs as diag_execs
+from m251.fisher.diagonal import dummy_execs
 from m251.fisher.diagonal import variational_diagonal_execs as vardiag_execs
 from m251.fisher.execs import fisher_execs
 from m251.fisher.execs import merging_execs
@@ -67,13 +68,14 @@ class MergeParams(ParamsAbc):
         normalize_fishers,
         #
         trial_index=None,
+        model_merger=diag_execs.diagonal_model_merger,
     ):
         pass
 
     def create_bindings(self):
         return {
             "mergeable_model": diag_execs.diagonal_mergeable_model_from_checkpoint,
-            "model_merger": diag_execs.diagonal_model_merger,
+            "model_merger": self.model_merger,
             #
             "checkpoint_to_fisher_matrix_uuid": self.get_checkpoint_to_fisher_matrix_uuid(),
             "weightings": create_pairwise_weightings(self.num_weightings),
@@ -252,6 +254,70 @@ def create_varying_params(
     ],
 )
 class Merge_Pairs_Normalized_LastCkpt(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="31b89b980deb434581355b99bcb3fbec",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_fisher_exp=FisherComputation_RobertLargeMnli_Rte_LastCkpt,
+        donor_fisher_exp=FisherComputation_LastCkpt,
+        additional_target_model_bindings=[
+            ["pretrained_model", "roberta-large-mnli"],
+            ["hf_back_compat", False],
+            ["pretrained_body_only", True],
+            ["use_roberta_head", True],
+        ],
+        additional_donor_model_bindings=[
+            ["pretrained_model", "roberta-large"],
+            ["hf_back_compat", True],
+            ["pretrained_body_only", True],
+            ["use_roberta_head", False],
+        ],
+    ),
+    fixed_params={
+        "pretrained_model": "roberta-large",
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 128,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "trial_index",
+        "models_to_merge",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("glue_label_map_overrides", defs.LABEL_MAP_OVERRIDES),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+    ],
+)
+class DummyMerge_Pairs_Normalized_LastCkpt(ExperimentAbc):
     pass
 
 

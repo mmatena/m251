@@ -2,10 +2,6 @@
 import collections
 import functools
 import itertools
-import random
-
-import tensorflow as tf
-import tensorflow_probability as tfp
 
 from del8.core import data_class
 from del8.core.di import scopes
@@ -21,6 +17,7 @@ from del8.executables.training import optimizers
 from m251.data.glue import glue
 
 from m251.fisher.diagonal import diagonal_execs as diag_execs
+from m251.fisher.diagonal import dummy_execs
 from m251.fisher.diagonal import variational_diagonal_execs as vardiag_execs
 from m251.fisher.execs import fisher_execs
 from m251.fisher.execs import merging_execs
@@ -40,15 +37,8 @@ from . import defs
 from .fisher import (
     FisherComputation_BertBase_HighResource,
     FisherComputation_BertBase_LowResource_LastCkpt,
-    FisherComputation_BertBaseFromMnliCkpt_LastCkpt,
     FisherComputation_BertBase_Squad2,
 )
-
-
-def create_weightings(num_weightings, n, seed=735492):
-    tf.random.set_seed(seed)
-    dist = tfp.distributions.Dirichlet(tf.ones([n]))
-    return dist.sample(num_weightings, seed=seed).numpy().tolist()
 
 
 @data_class.data_class()
@@ -57,7 +47,6 @@ class MergeParams(ParamsAbc):
         self,
         #
         trial_index,
-        chunk_index,
         #
         models_to_merge,
         num_weightings,
@@ -69,18 +58,18 @@ class MergeParams(ParamsAbc):
         pretrained_model,
         #
         normalize_fishers,
+        #
+        model_merger=diag_execs.diagonal_model_merger,
     ):
         pass
 
     def create_bindings(self):
         return {
             "mergeable_model": diag_execs.diagonal_mergeable_model_from_checkpoint_or_pretrained,
-            "model_merger": diag_execs.diagonal_model_merger,
+            "model_merger": self.model_merger,
             #
             "checkpoint_to_fisher_matrix_uuid": self.get_checkpoint_to_fisher_matrix_uuid(),
-            "weightings": create_weightings(
-                self.num_weightings, n=len(self.models_to_merge), seed=self.chunk_index
-            ),
+            "weightings": create_pairwise_weightings(self.num_weightings),
             #
             "checkpoints": [m.model_checkpoint_uuid for m in self.models_to_merge],
             "checkpoint_tasks": [m.task for m in self.models_to_merge],
@@ -155,115 +144,70 @@ def _get_infos_for_task(exps_data, fisher_exp):
     return run_params, fishers
 
 
-# def create_varying_params(
-#     exp,
-#     target_tasks,
-#     donor_tasks,
-#     target_fisher_exp,
-#     donor_fisher_exps,
-#     num_chunks,
-# ):
-#     with exp.get_storage() as storage:
-#         exps_data = storage.retrieve_storage_data(
-#             experiment_uuid=[e.uuid for e in donor_fisher_exps]
-#             + [target_fisher_exp.uuid]
-#         )
-
-#     target_run_params, target_fishers = _get_infos_for_task(
-#         exps_data, target_fisher_exp
-#     )
-
-#     donor_run_params, donor_fishers = _get_infos_for_task(exps_data, donor_fisher_exps)
-
-#     fishers = target_fishers.copy()
-#     fishers.update(donor_fishers)
-
-#     varying_params = []
-#     for p in target_run_params:
-#         trial_index = p.trial_index
-#         if p.task not in target_tasks:
-#             continue
-#         mtm = _to_mtm(p, fishers)
-#         for p1, p2 in itertools.combinations(donor_run_params, 2):
-
-#             if p1.task not in donor_tasks or p2.task not in donor_tasks:
-#                 continue
-#             elif p.uuid == p1.uuid and p.uuid == p2.uuid:
-#                 continue
-#             elif p1.task == p2.task:
-#                 continue
-
-#             mtm1 = _to_mtm(p1, fishers)
-#             mtm2 = _to_mtm(p2, fishers)
-#             print(trial_index, p1.task, p2.task)
-
-#             for chunk_index in range(num_chunks):
-#                 varying_params.append(
-#                     {
-#                         "trial_index": trial_index,
-#                         "models_to_merge": [mtm, mtm1, mtm2],
-#                         "chunk_index": chunk_index,
-#                     }
-#                 )
-#     random.shuffle(varying_params)
-#     return varying_params
-
-
 def create_varying_params(
     exp,
-    target_tasks,
-    donor_tasks,
-    target_fisher_exp,
-    donor_fisher_exps,
-    num_chunks,
-    squad_examples=None,
+    fisher_exps,
+    no_high_resource_pairs=False,
+    target_tasks=None,
 ):
     with exp.get_storage() as storage:
         exps_data = storage.retrieve_storage_data(
-            experiment_uuid=[e.uuid for e in donor_fisher_exps]
-            + [target_fisher_exp.uuid]
+            experiment_uuid=[f.uuid for f in fisher_exps]
         )
 
-    target_run_params, target_fishers = _get_infos_for_task(
-        exps_data, target_fisher_exp
-    )
-
-    donor_run_params, donor_fishers = _get_infos_for_task(exps_data, donor_fisher_exps)
-
-    fishers = target_fishers.copy()
-    fishers.update(donor_fishers)
+    run_params, fishers = _get_infos_for_task(exps_data, fisher_exps)
 
     varying_params = []
-    for p in target_run_params:
-        trial_index = p.trial_index
-        if p.task not in target_tasks:
+    for p1, p2 in itertools.combinations(run_params, 2):
+        if (
+            p1.trial_index != p2.trial_index
+            and p1.task not in defs.HIGH_RESOURCE_TASKS
+            and p2.task not in defs.HIGH_RESOURCE_TASKS
+        ):
             continue
-        mtm = _to_mtm(p, fishers)
-        for ps in itertools.combinations(donor_run_params, len(donor_tasks)):
-            if any(q.task not in donor_tasks for q in ps):
-                continue
-            elif any(p.uuid == q.uuid for q in ps):
-                continue
-            elif set(q.task for q in ps) != set(donor_tasks):
-                continue
-            elif squad_examples is not None and any(
-                q.task == "squad2" and q.num_examples != squad_examples for q in ps
-            ):
-                continue
+        elif p1.task == p2.task:
+            continue
+        elif (
+            no_high_resource_pairs
+            and p1.task in defs.HIGH_RESOURCE_TASKS
+            and p2.task in defs.HIGH_RESOURCE_TASKS
+        ):
+            continue
 
-            print(trial_index, [q.task for q in ps])
+        if (
+            target_tasks is not None
+            and p1.task not in target_tasks
+            and p2.task not in target_tasks
+        ):
+            continue
 
-            donor_mtms = [_to_mtm(q, fishers) for q in ps]
+        trial_index = 0
+        if p1.task not in defs.HIGH_RESOURCE_TASKS:
+            trial_index = p1.trial_index
+        elif p2.task not in defs.HIGH_RESOURCE_TASKS:
+            trial_index = p2.trial_index
 
-            for chunk_index in range(num_chunks):
-                varying_params.append(
-                    {
-                        "trial_index": trial_index,
-                        "models_to_merge": [mtm] + donor_mtms,
-                        "chunk_index": chunk_index,
-                    }
-                )
-    random.shuffle(varying_params)
+        mtm1 = _to_mtm(p1, fishers)
+        mtm2 = _to_mtm(p2, fishers)
+
+        if target_tasks is None or p1.task in target_tasks:
+            varying_params.append(
+                {
+                    "trial_index": trial_index,
+                    "models_to_merge": [mtm1, mtm2],
+                }
+            )
+        if target_tasks is None or p2.task in target_tasks:
+            varying_params.append(
+                {
+                    "trial_index": trial_index,
+                    "models_to_merge": [mtm2, mtm1],
+                }
+            )
+
+    # for p in varying_params:
+    #     print(p['trial_index'], p['models_to_merge'][0].task, p['models_to_merge'][1].task)
+
     return varying_params
 
 
@@ -271,139 +215,16 @@ def create_varying_params(
 
 
 @experiment.experiment(
-    uuid="c5ac525b604d4b9c8acd129716c2f033",
+    uuid="d84a783ed2dc47e2b5c62df612a7f3f7",
     group=PaperExpGroup,
     params_cls=MergeParams,
     executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
     varying_params=functools.partial(
         create_varying_params,
-        target_tasks={"rte"},
-        donor_tasks={"mnli", "qnli"},
-        target_fisher_exp=FisherComputation_BertBase_LowResource_LastCkpt,
-        donor_fisher_exps=[FisherComputation_BertBase_HighResource],
-        num_chunks=50,
-        squad_examples=4096,
-    ),
-    fixed_params={
-        "pretrained_model": "bert-base-uncased",
-        #
-        "num_weightings": 50,
-        #
-        "validation_examples": 2048,
-        "sequence_length": 64,
-        "batch_size": 512,
-        #
-        "normalize_fishers": True,
-    },
-    key_fields={
-        "models_to_merge",
-        "normalize_fishers",
-        "chunk_index",
-    },
-    bindings=[
-        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
-        #
-        scopes.ArgNameBindingSpec("split", "validation"),
-        scopes.ArgNameBindingSpec("shuffle", False),
-        scopes.ArgNameBindingSpec("repeat", False),
-        #
-        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
-        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
-        #
-        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
-        scopes.ArgNameBindingSpec(
-            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
-        ),
-        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
-        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
-        #
-        # This will let us evaluate the downloaded models while not
-        # affecting the finetuned ones.
-        scopes.ArgNameBindingSpec("pretrained_body_only", False),
-    ],
-)
-class Merge_BertBase_Rte_MnliQnli(ExperimentAbc):
-    pass
-
-
-@experiment.experiment(
-    uuid="9705957901bd48af8569808b2d00444a",
-    group=PaperExpGroup,
-    params_cls=MergeParams,
-    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
-    varying_params=functools.partial(
-        create_varying_params,
-        target_tasks={"rte"},
-        donor_tasks={"mnli", "rte"},
-        target_fisher_exp=FisherComputation_BertBase_LowResource_LastCkpt,
-        donor_fisher_exps=[
+        fisher_exps=[
             FisherComputation_BertBase_HighResource,
             FisherComputation_BertBase_LowResource_LastCkpt,
         ],
-        num_chunks=4,
-    ),
-    fixed_params={
-        "pretrained_model": "bert-base-uncased",
-        #
-        "num_weightings": 150,
-        #
-        "validation_examples": 2048,
-        "sequence_length": 64,
-        "batch_size": 512,
-        #
-        "normalize_fishers": True,
-    },
-    key_fields={
-        "models_to_merge",
-        "normalize_fishers",
-        "chunk_index",
-    },
-    bindings=[
-        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
-        #
-        scopes.ArgNameBindingSpec("split", "validation"),
-        scopes.ArgNameBindingSpec("shuffle", False),
-        scopes.ArgNameBindingSpec("repeat", False),
-        #
-        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
-        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
-        #
-        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
-        scopes.ArgNameBindingSpec(
-            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
-        ),
-        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
-        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
-        #
-        # This will let us evaluate the downloaded models while not
-        # affecting the finetuned ones.
-        scopes.ArgNameBindingSpec("pretrained_body_only", False),
-    ],
-)
-class Merge_BertBase_Rte_MnliRte(ExperimentAbc):
-    pass
-
-
-###############################################################################
-###############################################################################
-
-
-@experiment.experiment(
-    uuid="ad10b77209b84ea899d3018a2f009fa0",
-    group=PaperExpGroup,
-    params_cls=MergeParams,
-    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
-    varying_params=functools.partial(
-        create_varying_params,
-        target_tasks={"qqp"},
-        donor_tasks={"squad2", "qnli", "cola"},
-        target_fisher_exp=FisherComputation_BertBase_HighResource,
-        donor_fisher_exps=[
-            FisherComputation_BertBase_HighResource,
-            FisherComputation_BertBase_LowResource_LastCkpt,
-            FisherComputation_BertBase_Squad2,
-        ],
-        num_chunks=50,
     ),
     fixed_params={
         "pretrained_model": "bert-base-uncased",
@@ -419,7 +240,6 @@ class Merge_BertBase_Rte_MnliRte(ExperimentAbc):
     key_fields={
         "models_to_merge",
         "normalize_fishers",
-        "chunk_index",
     },
     bindings=[
         scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
@@ -443,25 +263,130 @@ class Merge_BertBase_Rte_MnliRte(ExperimentAbc):
         scopes.ArgNameBindingSpec("pretrained_body_only", False),
     ],
 )
-class Merge_BertBase_Qqp_SquadColaQnli(ExperimentAbc):
+class Merge_BertBase_Pairs(ExperimentAbc):
     pass
 
 
 @experiment.experiment(
-    uuid="a10fbf8b3f1b4a729fb498d8f5c3b0ef",
+    uuid="2c36ba94f81d4af1aa684b9746c1092b",
     group=PaperExpGroup,
     params_cls=MergeParams,
     executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
     varying_params=functools.partial(
         create_varying_params,
-        target_tasks={"qqp"},
-        donor_tasks={"qnli", "cola"},
-        target_fisher_exp=FisherComputation_BertBase_HighResource,
-        donor_fisher_exps=[
+        fisher_exps=[
             FisherComputation_BertBase_HighResource,
             FisherComputation_BertBase_LowResource_LastCkpt,
         ],
-        num_chunks=50,
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+        #
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+    ],
+)
+class DummyMerge_BertBase_Pairs(ExperimentAbc):
+    pass
+
+
+###############################################################################
+###############################################################################
+
+
+def create_varying_squad_merge_params(
+    exp,
+    fisher_exps,
+    squad_fisher_exp,
+    squad_num_examples=None,
+):
+    with exp.get_storage() as storage:
+        exps_data = storage.retrieve_storage_data(
+            experiment_uuid=[f.uuid for f in fisher_exps] + [squad_fisher_exp.uuid]
+        )
+
+    run_params, fishers = _get_infos_for_task(exps_data, fisher_exps)
+    squad_run_params, squad_fishers = _get_infos_for_task(exps_data, squad_fisher_exp)
+
+    varying_params = []
+    for squad_params in squad_run_params:
+        if (
+            squad_num_examples is not None
+            and squad_params.num_examples != squad_num_examples
+        ):
+            continue
+        for target_params in run_params:
+            trial_index = 0
+            if target_params.task not in defs.HIGH_RESOURCE_TASKS:
+                trial_index = target_params.trial_index
+
+            target_mtm = _to_mtm(target_params, fishers)
+            squad_mtm = _to_mtm(squad_params, squad_fishers)
+
+            # Since we don't need anything with the output of the squad2 model,
+            # do this hack to prevent exceptions when loading the model.
+            squad_mtm = squad_mtm.copy(task="rte")
+
+            varying_params.append(
+                {
+                    "trial_index": trial_index,
+                    "models_to_merge": [target_mtm, squad_mtm],
+                }
+            )
+
+    return varying_params
+
+
+###############################################################################
+
+
+@experiment.experiment(
+    uuid="a03fe86574fe4c77bec5bba159b5da2a",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_squad_merge_params,
+        fisher_exps=[
+            FisherComputation_BertBase_LowResource_LastCkpt,
+            # # NOTE: The high resource ones errored out, so they are not included
+            # # I'll need to fix it and re-run, probably in another experiment.
+            # FisherComputation_BertBase_HighResource,
+        ],
+        squad_fisher_exp=FisherComputation_BertBase_Squad2,
+        squad_num_examples=4096,
     ),
     fixed_params={
         "pretrained_model": "bert-base-uncased",
@@ -477,7 +402,6 @@ class Merge_BertBase_Qqp_SquadColaQnli(ExperimentAbc):
     key_fields={
         "models_to_merge",
         "normalize_fishers",
-        "chunk_index",
     },
     bindings=[
         scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
@@ -501,5 +425,60 @@ class Merge_BertBase_Qqp_SquadColaQnli(ExperimentAbc):
         scopes.ArgNameBindingSpec("pretrained_body_only", False),
     ],
 )
-class Merge_BertBase_Qqp_ColaQnli(ExperimentAbc):
+class Merge_BertBase_SquadDonor_4096(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="0fcba8d3c8304150bbd593423177541a",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_squad_merge_params,
+        fisher_exps=[
+            FisherComputation_BertBase_HighResource,
+        ],
+        squad_fisher_exp=FisherComputation_BertBase_Squad2,
+        squad_num_examples=4096,
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+        scopes.ArgNameBindingSpec("pretrained_full_model", True),
+    ],
+)
+class Merge_BertBase_HighResource_SquadDonor_4096(ExperimentAbc):
     pass

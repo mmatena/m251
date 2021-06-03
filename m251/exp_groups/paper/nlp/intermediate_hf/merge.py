@@ -17,6 +17,7 @@ from del8.executables.training import optimizers
 from m251.data.glue import glue
 
 from m251.fisher.diagonal import diagonal_execs as diag_execs
+from m251.fisher.diagonal import dummy_execs
 from m251.fisher.diagonal import variational_diagonal_execs as vardiag_execs
 from m251.fisher.execs import fisher_execs
 from m251.fisher.execs import merging_execs
@@ -60,13 +61,14 @@ class MergeParams(ParamsAbc):
         pretrained_model,
         #
         normalize_fishers,
+        model_merger=diag_execs.diagonal_model_merger,
     ):
         pass
 
     def create_bindings(self):
         return {
             "mergeable_model": diag_execs.diagonal_mergeable_model_from_checkpoint_or_pretrained,
-            "model_merger": diag_execs.diagonal_model_merger,
+            "model_merger": self.model_merger,
             #
             "checkpoint_to_fisher_matrix_uuid": self.get_checkpoint_to_fisher_matrix_uuid(),
             "weightings": create_pairwise_weightings(self.num_weightings),
@@ -268,6 +270,60 @@ class Merge_BertBase_Pairs(ExperimentAbc):
 
 
 @experiment.experiment(
+    uuid="f9dd4080eef04e03bba61d8191d4202b",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        fisher_exps=[
+            FisherComputation_BertBase_HighResource,
+            FisherComputation_BertBase_LowResource_LastCkpt,
+        ],
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+    ],
+)
+class DummyMerge_BertBase_Pairs(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
     uuid="b8649b50bf034027a586c3f5132917c1",
     group=PaperExpGroup,
     params_cls=MergeParams,
@@ -322,6 +378,66 @@ class Merge_BertBase_Pairs(ExperimentAbc):
     ],
 )
 class Merge_BertBaseFromMnli_Pairs(ExperimentAbc):
+    # NOTE: High resource tasks are NOT fine-tuned from MNLI.
+    pass
+
+
+@experiment.experiment(
+    uuid="97b8a04e8d234c0490502a569b7fd0ba",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        fisher_exps=[
+            FisherComputation_BertBase_HighResource,
+            FisherComputation_BertBaseFromMnliCkpt_LastCkpt,
+        ],
+        no_high_resource_pairs=True,
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones. It will be overriden for non-pretrained
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("pretrained_full_model", True),
+        scopes.ArgNameBindingSpec(
+            "mergeable_model_pretrained_model", defs.BERT_BASE_MNLI_CKPT
+        ),
+    ],
+)
+class DummyMerge_BertBaseFromMnli_Pairs(ExperimentAbc):
     # NOTE: High resource tasks are NOT fine-tuned from MNLI.
     pass
 
@@ -435,6 +551,65 @@ class Merge_BertBaseFromMnli_SquadDonor_4096(ExperimentAbc):
 
 
 @experiment.experiment(
+    uuid="a9bcf03160374050b5619171c92c3932",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_squad_merge_params,
+        fisher_exps=[
+            FisherComputation_BertBaseFromMnliCkpt_LastCkpt,
+        ],
+        squad_fisher_exp=FisherComputation_BertBase_Squad2,
+        squad_num_examples=4096,
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones. It will be overriden for non-pretrained
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("pretrained_full_model", True),
+        scopes.ArgNameBindingSpec(
+            "mergeable_model_pretrained_model", defs.BERT_BASE_MNLI_CKPT
+        ),
+    ],
+)
+class DummyMerge_BertBaseFromMnli_SquadDonor_4096(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
     uuid="aab6e7fb1ff14105a70c73c815fa230f",
     group=PaperExpGroup,
     params_cls=MergeParams,
@@ -492,6 +667,64 @@ class Merge_BertBase_SquadDonor_4096(ExperimentAbc):
 
 
 @experiment.experiment(
+    uuid="462e6b30fa164ac98c5b4213fd57307c",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_squad_merge_params,
+        fisher_exps=[
+            FisherComputation_BertBase_LowResource_LastCkpt,
+            # # NOTE: The high resource ones errored out, so they are not included
+            # # I'll need to fix it and re-run, probably in another experiment.
+            # FisherComputation_BertBase_HighResource,
+        ],
+        squad_fisher_exp=FisherComputation_BertBase_Squad2,
+        squad_num_examples=4096,
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+    ],
+)
+class DummyMerge_BertBase_SquadDonor_4096(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
     uuid="8068ab875df24437abf3e99af21f3024",
     group=PaperExpGroup,
     params_cls=MergeParams,
@@ -543,6 +776,62 @@ class Merge_BertBase_SquadDonor_4096(ExperimentAbc):
     ],
 )
 class Merge_BertBase_HighResource_SquadDonor_4096(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="d17a7909f3594f7ea542b5acdf7e86c8",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_squad_merge_params,
+        fisher_exps=[
+            FisherComputation_BertBase_HighResource,
+        ],
+        squad_fisher_exp=FisherComputation_BertBase_Squad2,
+        squad_num_examples=4096,
+    ),
+    fixed_params={
+        "pretrained_model": "bert-base-uncased",
+        #
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 512,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "models_to_merge",
+        "normalize_fishers",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        # This will let us evaluate the downloaded models while not
+        # affecting the finetuned ones.
+        scopes.ArgNameBindingSpec("pretrained_body_only", False),
+        scopes.ArgNameBindingSpec("pretrained_full_model", True),
+    ],
+)
+class DummyMerge_BertBase_HighResource_SquadDonor_4096(ExperimentAbc):
     pass
 
 

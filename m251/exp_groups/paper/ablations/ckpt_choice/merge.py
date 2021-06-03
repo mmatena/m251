@@ -16,6 +16,7 @@ from m251.data.glue import glue
 from m251.data.processing.constants import NUM_GLUE_TRAIN_EXAMPLES
 
 from m251.fisher.diagonal import diagonal_execs as diag_execs
+from m251.fisher.diagonal import dummy_execs
 from m251.fisher.diagonal import variational_diagonal_execs as vardiag_execs
 from m251.fisher.execs import fisher_execs
 from m251.fisher.execs import merging_execs
@@ -52,13 +53,14 @@ class MergeParams(ParamsAbc):
         validation_examples,
         #
         pretrained_model,
+        model_merger=diag_execs.diagonal_model_merger,
     ):
         pass
 
     def create_bindings(self):
         return {
             "mergeable_model": diag_execs.diagonal_mergeable_model_from_checkpoint,
-            "model_merger": diag_execs.diagonal_model_merger,
+            "model_merger": self.model_merger,
             #
             "checkpoint_to_fisher_matrix_uuid": self.get_checkpoint_to_fisher_matrix_uuid(),
             "weightings": create_pairwise_weightings(self.num_weightings),
@@ -283,6 +285,52 @@ def create_varying_params_sep_exps(
     ],
 )
 class Merge(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="a170876251da4bed9212638f0ca93862",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        train_exp=GlueFinetune,
+        fisher_exp=FisherComputation,
+    ),
+    fixed_params={
+        "num_weightings": 51,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 64,
+        "batch_size": 2048,
+        #
+        "pretrained_model": "base",
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "trial_index",
+        "models_to_merge",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "validation"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", glue.glue_robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+    ],
+)
+class DummyMerge(ExperimentAbc):
     pass
 
 

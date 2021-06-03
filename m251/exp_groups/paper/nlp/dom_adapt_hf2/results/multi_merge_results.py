@@ -1,7 +1,7 @@
 """
 export PYTHONPATH=$PYTHONPATH:~/Desktop/projects/m251:~/Desktop/projects/del8
 
-python3 m251/exp_groups/paper/nlp/intermediate_hf/results/multi_merge_results.py
+python3 m251/exp_groups/paper/nlp/dom_adapt_hf2/results/multi_merge_results.py
 
 """
 import collections
@@ -18,8 +18,6 @@ from del8.core.utils.type_util import hashabledict
 from m251.data.processing.constants import NUM_GLUE_TRAIN_EXAMPLES
 from m251.fisher.execs import merging_execs
 from m251.exp_groups.paper.results import utils as result_utils
-
-from m251.exp_groups.paper.nlp.intermediate_hf import defs
 
 get_single_score = result_utils.get_single_score
 result_file = result_utils.result_file
@@ -41,19 +39,17 @@ def create_json(merge_exp):
         # print([(r.weighting[0], get_single_score(r.results)) for r in reses])
 
         res = max(reses, key=lambda r: get_single_score(r.results))
-        mtms = params.models_to_merge
-        target_mtm, *donor_mtms = mtms
+        target_mtm, *donor_mtms = params.models_to_merge
 
         items.append(
             {
                 "target_task": target_mtm.task,
                 "donor_tasks": [m.task for m in donor_mtms],
                 "trial_index": params.trial_index,
-                "chunk_index": params.chunk_index,
+                # "chunk_index": params.chunk_index,
                 "merged_score": res.results,
                 "weighting": res.weighting,
                 "target_ckpt": target_mtm.model_checkpoint_uuid,
-                "ckpt_uuids": frozenset(m.model_checkpoint_uuid for m in mtms),
             }
         )
 
@@ -63,7 +59,7 @@ def create_json(merge_exp):
 def process_json(jason):
     groups = collections.defaultdict(list)
     for item in jason:
-        key = (item["trial_index"], tuple(item["donor_tasks"]), item["ckpt_uuids"])
+        key = (item["trial_index"], tuple(item["donor_tasks"]), item["target_task"])
         groups[key].append(item)
 
     groups = {
@@ -73,27 +69,21 @@ def process_json(jason):
 
     groups2 = collections.defaultdict(list)
     for v in groups.values():
-        groups2[tuple(v["donor_tasks"])].append(v)
+        groups2[tuple([v["target_task"]]) + tuple(v["donor_tasks"])].append(v)
 
     for k, v in groups2.items():
         scores = [get_single_score(w["merged_score"]) for w in v]
-        print(scores)
         print([(w["weighting"]) for w in v])
-        print(k)
-        # avg_score = sum(scores) / len(scores)
-        avg_score = np.mean(scores)
-        stddev = np.std(scores)
-        print(f"{k[0]}, {k[1]}: {avg_score:02f}, {stddev:01f}, {len(scores)}")
+        avg_score = sum(scores) / len(scores)
+        print(f"{k[0]}, {k[1]}, {k[2]}: {avg_score:02f}, {len(scores)}")
         # print(scores)
 
 
 if __name__ == "__main__":
-    from m251.exp_groups.paper.nlp.intermediate_hf import multi_merge
+    from m251.exp_groups.paper.nlp.dom_adapt_hf2 import multi_merge
 
-    # exp = multi_merge.Merge_BertBase_Rte_MnliQnli
-    # exp = multi_merge.Merge_BertBase_Rte_MnliRte
-    # exp = multi_merge.Merge_BertBase_Qqp_SquadColaQnli
-    exp = multi_merge.Merge_BertBase_Qqp_ColaQnli
+    exp = multi_merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainCs
+    # exp = multi_merge.Merge_ROBERTA_AllCkpts_TestSet_PretrainBioMed
 
     jason = create_json(exp)
     process_json(jason)

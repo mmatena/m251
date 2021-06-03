@@ -1,20 +1,27 @@
 """
 export PYTHONPATH=$PYTHONPATH:~/Desktop/projects/m251:~/Desktop/projects/del8
 
-python3 m251/exp_groups/paper/nlp/intermediate_hf/launch/launch_multi_merge.py
+python3 m251/exp_groups/paper/nlp/intermediate_hf/launch/launch_eval.py
 
 """
 from del8.executors.gce import gce
 from del8.executors.vastai import vastai
 from del8.executors.vastai import api_wrapper
 
-from m251.exp_groups.paper.nlp.intermediate_hf import multi_merge
+from m251.exp_groups.paper.nlp.intermediate_hf import eval
+from m251.exp_groups.paper.nlp.intermediate_hf import eval_large
 
 
-# EXP = multi_merge.Merge_BertBase_Rte_MnliQnli
-# EXP = multi_merge.Merge_BertBase_Rte_MnliRte
-# EXP = multi_merge.Merge_BertBase_Qqp_SquadColaQnli
-EXP = multi_merge.Merge_BertBase_Qqp_ColaQnli
+# execution_items = []
+# EXP = eval.Eval_LrSrc_Sft_LastCkpt
+# execution_items.extend(EXP.create_all_execution_items())
+# EXP = eval.Eval_HrSrc_Sft_LastCkpt
+# execution_items.extend(EXP.create_all_execution_items())
+
+# EXP = eval.EvalBertBaseFromMnli_Sft_LastCkpt
+EXP = eval.EvalGlueFinetune_BertBase_Squad_Sft
+
+# EXP = eval_large.Eval_Large_Sft_LastCkpt
 
 execution_items = EXP.create_all_execution_items()
 print(f"Number of execution items to process: {len(execution_items)}")
@@ -22,23 +29,23 @@ print(f"Number of execution items to process: {len(execution_items)}")
 vast_params = vastai.create_supervisor_params(
     EXP,
     execution_items=execution_items,
-    num_workers=6,
+    num_workers=5,
     offer_query=vastai.OfferQuery(
         queries_str="  ".join(
             [
                 "reliability > 0.95",
                 "num_gpus=1",
-                "dph < 3.0",
+                "dph < 2.25",
                 "inet_down > 100",
                 "inet_up > 75",
-                "gpu_ram >= 10",
+                # "gpu_ram >= 10",
                 # "dlperf >= 16",
                 "cuda_vers >= 11.0 has_avx = true",
             ]
         ),
         order_str="dlperf_usd-",
     ),
-    disk_gb=32,
+    disk_gb=16,
     image="tensorflow/tensorflow:2.4.0-gpu",
 )
 
@@ -47,22 +54,3 @@ print(f"Number of acceptable offers: {len(offers)}")
 
 launch_params = gce.GceParams()
 node, deploy = gce.launch(execution_items, vast_params, launch_params)
-
-
-#
-#
-#
-###############################################################################
-# Stages of testing:
-###############################################################################
-# if True:
-#     from del8.core.execution import entrypoint
-#     from del8.storages.gcp import gcp
-
-# gcp.PERSISTENT_CACHE = True
-# EXP.to_dev_mode()
-
-# execution_items = EXP.create_all_execution_items()
-# print(f'Number of execution items to process: {len(execution_items)}')
-
-# entrypoint.worker_run(**execution_items[0].worker_run_kwargs)

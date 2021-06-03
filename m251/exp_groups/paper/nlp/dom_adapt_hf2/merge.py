@@ -18,6 +18,7 @@ from m251.data.glue import glue
 from m251.data.domains import target_tasks
 
 from m251.fisher.diagonal import diagonal_execs as diag_execs
+from m251.fisher.diagonal import dummy_execs
 from m251.fisher.diagonal import variational_diagonal_execs as vardiag_execs
 from m251.fisher.execs import fisher_execs
 from m251.fisher.execs import merging_execs
@@ -68,13 +69,14 @@ class MergeParams(ParamsAbc):
         #
         pretrained_examples,
         pretrained_reg_strength,
+        model_merger=diag_execs.diagonal_model_merger,
     ):
         pass
 
     def create_bindings(self):
         return {
             "mergeable_model": diag_execs.diagonal_mergeable_model_from_checkpoint_or_pretrained,
-            "model_merger": diag_execs.diagonal_model_merger,
+            "model_merger": self.model_merger,
             #
             "checkpoint_to_fisher_matrix_uuid": self.get_checkpoint_to_fisher_matrix_uuid(),
             "weightings": create_pairwise_weightings(self.num_weightings),
@@ -460,6 +462,62 @@ class Merge_ROBERTA_AllCkpts_TestSet_PretrainCs(ExperimentAbc):
 
 
 @experiment.experiment(
+    uuid="5deb582189184dd2bc0ae2abadc6c8e7",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_fisher_exp=FisherComputation_ROBERTA_TargetTasks_AllCkpts,
+        donor_fisher_exp=Fisher_PretrainCs_16384,
+        target_tasks=CS_TASKS,
+        donor_tasks=("cs"),
+        pretrained_examples=1048576,
+        pretrained_reg_strength=0.0,
+    ),
+    fixed_params={
+        "num_weightings": 76,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 256,
+        "batch_size": 128,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "trial_index",
+        "models_to_merge",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "test"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", target_tasks.finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", target_tasks.robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+        #
+        scopes.ArgNameBindingSpec("min_fisher", 1e-20),
+    ],
+)
+class DummyMerge_ROBERTA_AllCkpts_TestSet_PretrainCs(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
     uuid="71f59e701b674c0badc2a8355a46f835",
     group=PaperExpGroup,
     params_cls=MergeParams,
@@ -511,6 +569,62 @@ class Merge_ROBERTA_AllCkpts_TestSet_PretrainCs(ExperimentAbc):
     ],
 )
 class Merge_ROBERTA_AllCkpts_TestSet_PretrainBioMed(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="5526323fa4664cd0ad55344e21258f6b",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_fisher_exp=FisherComputation_ROBERTA_TargetTasks_AllCkpts,
+        donor_fisher_exp=Fisher_PretrainBioMed_16384,
+        target_tasks=BIO_MED_TASKS,
+        donor_tasks=("bio_med"),
+        pretrained_examples=1048576,
+        pretrained_reg_strength=0.0,
+    ),
+    fixed_params={
+        "num_weightings": 76,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 256,
+        "batch_size": 128,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "trial_index",
+        "models_to_merge",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "test"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", target_tasks.finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", target_tasks.robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+        #
+        scopes.ArgNameBindingSpec("min_fisher", 1e-20),
+    ],
+)
+class DummyMerge_ROBERTA_AllCkpts_TestSet_PretrainBioMed(ExperimentAbc):
     pass
 
 
@@ -570,6 +684,62 @@ class Merge_DAPT_AllCkpts_TestSet_PretrainCs(ExperimentAbc):
 
 
 @experiment.experiment(
+    uuid="67cd9e5f46b54798b0fe238299afbe23",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_fisher_exp=Fisher_DAPT_CsFt_AllCkpts,
+        donor_fisher_exp=Fisher_PretrainCs_16384,
+        target_tasks=CS_TASKS,
+        donor_tasks=("cs"),
+        pretrained_examples=1048576,
+        pretrained_reg_strength=0.0,
+    ),
+    fixed_params={
+        "num_weightings": 76,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 256,
+        "batch_size": 128,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "trial_index",
+        "models_to_merge",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "test"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", target_tasks.finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", target_tasks.robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+        #
+        scopes.ArgNameBindingSpec("min_fisher", 1e-20),
+    ],
+)
+class DummyMerge_DAPT_AllCkpts_TestSet_PretrainCs(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
     uuid="384939435e9a40919bdf8beaa69f4732",
     group=PaperExpGroup,
     params_cls=MergeParams,
@@ -621,4 +791,60 @@ class Merge_DAPT_AllCkpts_TestSet_PretrainCs(ExperimentAbc):
     ],
 )
 class Merge_DAPT_AllCkpts_TestSet_PretrainBioMed(ExperimentAbc):
+    pass
+
+
+@experiment.experiment(
+    uuid="3e26557651a240bf881f9a3f0eb48b29",
+    group=PaperExpGroup,
+    params_cls=MergeParams,
+    executable_cls=merging_execs.merge_and_evaluate_from_checkpoints,
+    varying_params=functools.partial(
+        create_varying_params,
+        target_fisher_exp=Fisher_DAPT_BioMedFt_AllCkpts,
+        donor_fisher_exp=Fisher_PretrainBioMed_16384,
+        target_tasks=BIO_MED_TASKS,
+        donor_tasks=("bio_med"),
+        pretrained_examples=1048576,
+        pretrained_reg_strength=0.0,
+    ),
+    fixed_params={
+        "num_weightings": 76,
+        #
+        "validation_examples": 2048,
+        "sequence_length": 256,
+        "batch_size": 128,
+        #
+        "normalize_fishers": True,
+        "model_merger": dummy_execs.dummy_fisher_model_merger,
+    },
+    key_fields={
+        "trial_index",
+        "models_to_merge",
+    },
+    bindings=[
+        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
+        #
+        scopes.ArgNameBindingSpec("split", "test"),
+        scopes.ArgNameBindingSpec("shuffle", False),
+        scopes.ArgNameBindingSpec("repeat", False),
+        #
+        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
+        scopes.ArgNameBindingSpec("dataset", target_tasks.finetuning_dataset),
+        #
+        scopes.ArgNameBindingSpec("evaluate_model", eval_execs.robust_evaluate_model),
+        scopes.ArgNameBindingSpec(
+            "robust_evaluate_dataset", target_tasks.robust_evaluation_dataset
+        ),
+        scopes.ArgNameBindingSpec("metrics_for_tasks", metrics_exe.glue_robust_metrics),
+        scopes.ArgNameBindingSpec("cache_validation_batches_as_lists", True),
+        #
+        scopes.ArgNameBindingSpec("hf_back_compat", False),
+        scopes.ArgNameBindingSpec("pretrained_body_only", True),
+        scopes.ArgNameBindingSpec("use_roberta_head", True),
+        #
+        scopes.ArgNameBindingSpec("min_fisher", 1e-20),
+    ],
+)
+class DummyMerge_DAPT_AllCkpts_TestSet_PretrainBioMed(ExperimentAbc):
     pass

@@ -221,6 +221,8 @@ def create_latex_table(  # noqa: C901
             merged_scores = np.array(
                 [get_single_score(item["merged_score"]) for item in ret_items]
             )
+            if target_task == "rte" and donor_task == "mnli":
+                print(merged_scores)
             mean = np.mean(merged_scores)
             stddev = np.std(merged_scores) if len(ret_items) > 1 else None
             ret2[donor_task] = (mean, stddev)
@@ -278,6 +280,8 @@ def create_latex_table(  # noqa: C901
 
 if __name__ == "__main__":
     from m251.exp_groups.paper.nlp.intermediate_hf import merge
+
+    # from m251.exp_groups.paper.nlp2.intermediate import merge
     from m251.exp_groups.paper.nlp.intermediate_hf import merge_large
 
     ###########################################################################
@@ -316,18 +320,52 @@ if __name__ == "__main__":
     ###########################################################################
     ###########################################################################
 
-    merge_exp = merge.Merge_BertBase_RteHoldout_LastCkpt50
+    merge_exp = merge.Merge_BertBase_Pairs
+    # merge_exp = merge.DummyMerge_BertBase_Pairs
+
+    # merge_exp = merge.Merge_BertBaseFromMnli_Pairs
+    # merge_exp = merge.DummyMerge_BertBaseFromMnli_Pairs
+
+    # merge_exp = merge_large.Merge_Pairs_Normalized_LastCkpt
+    # merge_exp = merge_large.DummyMerge_Pairs_Normalized_LastCkpt
+
+    # merge_exp = merge.DummyMerge_BertBaseFromMnli_SquadDonor_4096
+    # merge_exp = merge.DummyMerge_BertBase_SquadDonor_4096
+    # merge_exp = merge.DummyMerge_BertBase_HighResource_SquadDonor_4096
+
     summary = create_json(merge_exp)
-    # s = json.dumps(summary, indent=2)
-    # print(s)
+    # print(summary)
 
     filepath = "/tmp/kfgsdkfdg.json"
     with open(filepath, "w") as f:
         json.dump(summary, f, indent=2)
 
-    # t = create_csv_table(filepath, group_by_target_ckpt=True)
-    t = create_csv_table(filepath)
+    # t = create_csv_table(filepath)
+    # print(t)
+
+    t = create_latex_table(
+        filepath,
+        target_task_order=result_utils.GLUE_TASKS_ORDER,
+        # target_task_order=('rte',),
+        donor_task_order=result_utils.GLUE_TASKS_ORDER + ("squad2",),
+        # donor_task_order=('squad2',),
+    )
     print(t)
+
+    ###########################################################################
+
+    # merge_exp = merge.Merge_BertBase_RteHoldout_LastCkpt50
+    # summary = create_json(merge_exp)
+    # # s = json.dumps(summary, indent=2)
+    # # print(s)
+
+    # filepath = "/tmp/kfgsdkfdg.json"
+    # with open(filepath, "w") as f:
+    #     json.dump(summary, f, indent=2)
+
+    # # t = create_csv_table(filepath, group_by_target_ckpt=True)
+    # t = create_csv_table(filepath)
+    # print(t)
 
     ###########################################################################
 

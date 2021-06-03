@@ -30,9 +30,6 @@ from m251.exp_groups.paper.paper_group import PaperExpGroup
 from . import defs
 from .finetune import (
     GlueFinetune_BertBase,
-    GlueFinetune_BertBaseFromMnliCkpt,
-    GlueFinetune_BertBase_RteHoldout,
-    GlueFinetune_BertBase_RteHoldout2,
 )
 
 
@@ -75,7 +72,7 @@ class FromHfFisherParams(ParamsAbc):
 
 
 @experiment.experiment(
-    uuid="4e297876a3364763b599692936b33970",
+    uuid="f42346afa2b5417db63e834b0b0a6c64",
     group=PaperExpGroup,
     params_cls=FromHfFisherParams,
     executable_cls=fisher_execs.fisher_computation,
@@ -114,46 +111,7 @@ class FisherComputation_BertBase_HighResource(ExperimentAbc):
 
 
 @experiment.experiment(
-    uuid="d48f8ff943f346308d7431a1ecc1f623",
-    group=PaperExpGroup,
-    params_cls=FromHfFisherParams,
-    executable_cls=fisher_execs.fisher_computation,
-    varying_params=[
-        {
-            "task": "mnli",
-            "pretrained_model": "textattack/roberta-base-MNLI",
-            "num_examples": MAX_EXAMPLES,
-        }
-    ],
-    fixed_params={
-        "batch_size": 4,
-        "sequence_length": 64,
-    },
-    key_fields={
-        "task",
-        "pretrained_model",
-    },
-    bindings=[
-        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
-        scopes.ArgNameBindingSpec("y_samples", None),
-        #
-        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
-        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
-        #
-        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 3),
-        #
-        scopes.ArgNameBindingSpec("loader", gc_exe.bert_loader),
-        #
-        scopes.ArgNameBindingSpec("pretrained_body_only", False),
-        scopes.ArgNameBindingSpec("use_roberta_head", True),
-    ],
-)
-class FisherComputation_RobertaBase_Mnli(ExperimentAbc):
-    pass
-
-
-@experiment.experiment(
-    uuid="f1d52fbbbd8f45059cc49f631c74d9a4",
+    uuid="3ce7b1aa6c0a4f4f89e9047c96f068a9",
     group=PaperExpGroup,
     params_cls=FromHfFisherParams,
     executable_cls=fisher_execs.fisher_computation,
@@ -161,9 +119,8 @@ class FisherComputation_RobertaBase_Mnli(ExperimentAbc):
         {
             "task": "squad2",
             "pretrained_model": defs.TASK_TO_CKPT_BERT_BASE["squad2"],
-            "num_examples": num_examples,
+            "num_examples": MAX_EXAMPLES,
         }
-        for num_examples in [1024, 4096, 16384]
     ],
     fixed_params={
         "batch_size": 1,
@@ -280,7 +237,7 @@ def create_varying_params_last_ckpt(
 
 
 @experiment.experiment(
-    uuid="407949f0f73d48ec8f25147978c7fe3c",
+    uuid="4ba5f59b66cc4830975c7f681d06cc96",
     group=PaperExpGroup,
     params_cls=FisherParams,
     executable_cls=fisher_execs.fisher_computation,
@@ -309,107 +266,4 @@ def create_varying_params_last_ckpt(
     ],
 )
 class FisherComputation_BertBase_LowResource_LastCkpt(ExperimentAbc):
-    pass
-
-
-@experiment.experiment(
-    uuid="89ec2ea8364d4aaabddf290f1ac6d787",
-    group=PaperExpGroup,
-    params_cls=FisherParams,
-    executable_cls=fisher_execs.fisher_computation,
-    varying_params=functools.partial(
-        create_varying_params_last_ckpt,
-        train_exp=GlueFinetune_BertBaseFromMnliCkpt,
-        max_examples=MAX_EXAMPLES,
-    ),
-    fixed_params={
-        "batch_size": 4,
-        "sequence_length": 64,
-    },
-    key_fields={
-        "finetuned_ckpt_uuid",
-    },
-    bindings=[
-        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
-        scopes.ArgNameBindingSpec("y_samples", None),
-        #
-        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
-        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
-        #
-        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 3),
-        #
-        scopes.ArgNameBindingSpec("pretrained_body_only", True),
-    ],
-)
-class FisherComputation_BertBaseFromMnliCkpt_LastCkpt(ExperimentAbc):
-    pass
-
-
-@experiment.experiment(
-    uuid="d3e464128afc4b819283490c3cbd83cc",
-    group=PaperExpGroup,
-    params_cls=FisherParams,
-    executable_cls=fisher_execs.fisher_computation,
-    varying_params=functools.partial(
-        create_varying_params_last_ckpt,
-        train_exp=GlueFinetune_BertBase_RteHoldout,
-        max_examples=MAX_EXAMPLES,
-    ),
-    fixed_params={
-        "batch_size": 4,
-        "sequence_length": 64,
-    },
-    key_fields={
-        "finetuned_ckpt_uuid",
-    },
-    bindings=[
-        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
-        scopes.ArgNameBindingSpec("y_samples", None),
-        #
-        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
-        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
-        #
-        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 3),
-        #
-        scopes.ArgNameBindingSpec("pretrained_body_only", True),
-        #
-        scopes.ArgNameBindingSpec("tfds_skip", 277),
-    ],
-)
-class FisherComputation_BertBase_RteHoldout_LastCkpt(ExperimentAbc):
-    pass
-
-
-@experiment.experiment(
-    uuid="2414f8eb074c49ab9dcbcd6ce8c461f4",
-    group=PaperExpGroup,
-    params_cls=FisherParams,
-    executable_cls=fisher_execs.fisher_computation,
-    varying_params=functools.partial(
-        create_varying_params_last_ckpt,
-        train_exp=GlueFinetune_BertBase_RteHoldout2,
-        max_examples=MAX_EXAMPLES,
-    ),
-    fixed_params={
-        "batch_size": 4,
-        "sequence_length": 64,
-    },
-    key_fields={
-        "finetuned_ckpt_uuid",
-    },
-    bindings=[
-        scopes.ArgNameBindingSpec("fisher_type", "diagonal"),
-        scopes.ArgNameBindingSpec("y_samples", None),
-        #
-        scopes.ArgNameBindingSpec("tfds_dataset", tfds_execs.gcp_tfds_dataset),
-        scopes.ArgNameBindingSpec("dataset", glue.glue_finetuning_dataset),
-        #
-        scopes.ArgNameBindingSpec("fisher_class_chunk_size", 3),
-        #
-        scopes.ArgNameBindingSpec("pretrained_body_only", True),
-        #
-        scopes.ArgNameBindingSpec("tfds_skip", 277),
-    ],
-)
-class FisherComputation_BertBase_RteHoldout_LastCkpt2(ExperimentAbc):
     pass
